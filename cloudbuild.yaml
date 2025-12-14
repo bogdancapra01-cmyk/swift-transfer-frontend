@@ -2,9 +2,12 @@ steps:
   - name: "gcr.io/cloud-builders/docker"
     args:
       - build
+      - --build-arg
+      - VITE_API_URL=https://SWIFT-TRANSFER-BE-URL-AICI
       - -t
       - europe-west1-docker.pkg.dev/wave9-calind-447214/swift-transfer-repo/swift-transfer-fe:$COMMIT_SHA
       - .
+
 
   - name: "gcr.io/cloud-builders/docker"
     args:
