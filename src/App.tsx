@@ -2,11 +2,18 @@ import { useMemo, useState } from "react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Input } from "./components/ui/input";
-import { Label } from "./components/ui/label";
 
 type SelectedFile = {
   file: File;
   id: string;
+};
+
+type InitResponse = {
+  transferId: string;
+  uploads: Array<{
+    objectPath: string;
+    uploadUrl: string;
+  }>;
 };
 
 function formatBytes(bytes: number) {
@@ -18,16 +25,24 @@ function formatBytes(bytes: number) {
   return `${value.toFixed(value >= 10 || i === 0 ? 0 : 1)} ${sizes[i]}`;
 }
 
+const API_BASE =
+  (import.meta.env.VITE_API_URL as string | undefined) ??
+  "https://swift-transfer-be-829099680012.europe-west1.run.app/";
+
 export default function App() {
   const [files, setFiles] = useState<SelectedFile[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [status, setStatus] = useState<string>("");
+  const [error, setError] = useState<string>("");
+
   const totalSize = useMemo(
-  () => files.reduce<number>((sum, f) => sum + f.file.size, 0),
-  [files]
+    () => files.reduce((sum, f) => sum + f.file.size, 0),
+    [files]
   );
 
   function addFiles(list: FileList | null) {
     if (!list) return;
-    const incoming = Array.from(list).map((file) => ({
+    const incoming: SelectedFile[] = Array.from(list).map((file) => ({
       file,
       id: crypto.randomUUID(),
     }));
@@ -38,89 +53,146 @@ export default function App() {
     setFiles((prev) => prev.filter((f) => f.id !== id));
   }
 
+  async function handleUpload() {
+    setError("");
+    setStatus("");
+
+    if (!files.length) {
+      setError("Selectează cel puțin un fișier.");
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      // 1) init transfer (get signed upload URLs)
+      const initPayload = {
+        files: files.map((f) => ({
+          name: f.file.name,
+          type: f.file.type || "application/octet-stream",
+          size: f.file.size,
+        })),
+      };
+
+      const initRes = await fetch(`${API_BASE}/api/transfers/init`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(initPayload),
+      });
+
+      if (!initRes.ok) {
+        const text = await initRes.text();
+        throw new Error(`Init failed (${initRes.status}): ${text}`);
+      }
+
+      const initJson = (await initRes.json()) as InitResponse;
+
+      if (!initJson.uploads?.length) {
+        throw new Error("Init response missing uploads.");
+      }
+
+      setStatus(`Init OK. Uploading ${initJson.uploads.length} file(s)...`);
+
+      // 2) upload each file directly to GCS using signed URL
+      for (let i = 0; i < initJson.uploads.length; i++) {
+        const upload = initJson.uploads[i];
+        const file = files[i]?.file;
+        if (!file) continue;
+
+        const putRes = await fetch(upload.uploadUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": file.type || "application/octet-stream",
+          },
+          body: file,
+        });
+
+        if (!putRes.ok) {
+          const text = await putRes.text();
+          throw new Error(`Upload failed for ${file.name}: ${putRes.status} ${text}`);
+        }
+
+        setStatus(`Uploaded ${i + 1}/${initJson.uploads.length}: ${file.name}`);
+      }
+
+      setStatus(
+        `✅ Upload complete. transferId: ${initJson.transferId} (next: share link)`
+      );
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
       <Card className="w-full max-w-2xl bg-slate-900/60 border-slate-800">
         <CardHeader>
-          <CardTitle className="text-2xl">Swift Transfer</CardTitle>
+          <CardTitle className="text-2xl">
+            Swift Transfer 🚀
+          </CardTitle>
           <p className="text-sm text-slate-300">
-            Upload documents and generate a shareable link.
+            Încarcă fișiere și generăm link-uri de upload (pasul următor: share link + email).
           </p>
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="file">Select files</Label>
+          <div className="flex items-center gap-3">
             <Input
-              id="file"
               type="file"
               multiple
               onChange={(e) => addFiles(e.target.files)}
             />
-            <p className="text-xs text-slate-400">
-              Supported: pdf, png, jpg, xlsx, docx etc.
-            </p>
+            <Button onClick={handleUpload} disabled={isUploading}>
+              {isUploading ? "Uploading..." : "Upload"}
+            </Button>
           </div>
 
-          <div className="rounded-lg border border-slate-800 p-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Selected files</p>
-              <p className="text-xs text-slate-400">
-                {files.length} files • {formatBytes(totalSize)}
-              </p>
-            </div>
+          <div className="text-sm text-slate-300">
+            {files.length} fișier(e) • {formatBytes(totalSize)}
+          </div>
 
-            {files.length === 0 ? (
-              <p className="text-sm text-slate-400 mt-2">
-                No files selected yet.
-              </p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {files.map(({ file, id }) => (
-                  <li
-                    key={id}
-                    className="flex items-center justify-between rounded-md bg-slate-950/50 border border-slate-800 px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm truncate">{file.name}</p>
-                      <p className="text-xs text-slate-400">
-                        {formatBytes(file.size)}
-                      </p>
+          {files.length > 0 && (
+            <div className="space-y-2">
+              {files.map((f) => (
+                <div
+                  key={f.id}
+                  className="flex items-center justify-between rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate">{f.file.name}</div>
+                    <div className="text-xs text-slate-400">
+                      {formatBytes(f.file.size)}
                     </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => removeFile(id)}
-                    >
-                      Remove
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    onClick={() => removeFile(f.id)}
+                    disabled={isUploading}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
 
-          <div className="flex gap-2">
-            <Button
-              className="flex-1"
-              disabled={files.length === 0}
-              onClick={() => alert("Next: connect to backend upload API")}
-            >
-              Upload & Generate Link
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => setFiles([])}
-              disabled={files.length === 0}
-            >
-              Clear
-            </Button>
-          </div>
+          {status && (
+            <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3 text-sm">
+              {status}
+            </div>
+          )}
 
-          <p className="text-xs text-slate-400">
-            Next step: connect this button to the backend endpoint that uploads
-            files to Cloud Storage and creates a share token in Firestore.
-          </p>
+          {error && (
+            <div className="rounded-md border border-red-900 bg-red-950/40 p-3 text-sm text-red-200">
+              {error}
+            </div>
+          )}
+
+          <div className="text-xs text-slate-500">
+            API: {API_BASE}
+          </div>
         </CardContent>
       </Card>
     </div>
