@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import { Button } from "./components/ui/button";
-import { Card, CardContent, CardHeader } from "./components/ui/card";
+import { Card, CardContent } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 import TransferPage from "./pages/TransferPage";
 import logo from "./assets/logo.png";
@@ -24,7 +24,7 @@ type CompleteResponse = {
 };
 
 function formatBytes(bytes: number) {
-  if (bytes === 0) return "0 B";
+  if (!bytes) return "0 B";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -34,11 +34,12 @@ function formatBytes(bytes: number) {
 
 const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ??
-  "https://swift-transfer-be-829099680012.europe-west1.run.app";
+  "https://api.swift-transfer.app";
 
 function UploadPage() {
   const [files, setFiles] = useState<SelectedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
 
@@ -48,7 +49,8 @@ function UploadPage() {
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailStatus, setEmailStatus] = useState<string>("");
 
-  const [isFinalizing, setIsFinalizing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const totalSize = useMemo(
     () => files.reduce((sum, f) => sum + f.file.size, 0),
@@ -60,12 +62,12 @@ function UploadPage() {
 
     setShareUrl("");
     setEmailStatus("");
-    setError("");
 
     const incoming: SelectedFile[] = Array.from(list).map((file) => ({
       file,
       id: crypto.randomUUID(),
     }));
+
     setFiles((prev) => [...prev, ...incoming]);
   }
 
@@ -81,6 +83,9 @@ function UploadPage() {
     setStatus("");
     setError("");
     setEmailStatus("");
+    setEmailTo("");
+    setEmailMsg("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   async function handleUpload() {
@@ -97,7 +102,7 @@ function UploadPage() {
     setIsUploading(true);
 
     try {
-      // 1) init transfer (get signed upload URLs)
+      // 1) init transfer
       const initPayload = {
         files: files.map((f) => ({
           name: f.file.name,
@@ -125,7 +130,7 @@ function UploadPage() {
 
       setStatus(`Init OK. Uploading ${initJson.uploads.length} file(s)...`);
 
-      // 2) upload each file directly to GCS using signed URL
+      // 2) upload each file to GCS signed URL
       for (let i = 0; i < initJson.uploads.length; i++) {
         const upload = initJson.uploads[i];
         const file = files[i]?.file;
@@ -149,7 +154,7 @@ function UploadPage() {
         setStatus(`Uploaded ${i + 1}/${initJson.uploads.length}: ${file.name}`);
       }
 
-      // 3) COMPLETE transfer (mark ready + get shareUrl)
+      // 3) complete transfer
       setIsFinalizing(true);
       setStatus("Finalizing transfer (generating share link)...");
 
@@ -202,7 +207,6 @@ function UploadPage() {
         return;
       }
 
-      // Extragem transferId din shareUrl (ultimul segment)
       const transferId = shareUrl.split("/").filter(Boolean).pop();
       if (!transferId) {
         setEmailStatus("Nu pot extrage transferId din shareUrl.");
@@ -233,172 +237,220 @@ function UploadPage() {
     }
   }
 
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    addFiles(e.dataTransfer.files);
+  }
+
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }
+
+  function onDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }
+
+  const busy = isUploading || isFinalizing;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-      <Card
-        className="w-full max-w-2xl
-                   bg-slate-900/60 backdrop-blur
-                   border border-slate-800
-                   shadow-2xl rounded-2xl"
-      >
-        <CardHeader className="space-y-3">
-          <div className="flex justify-center">
-            <img src={logo} alt="Swift Transfer" className="h-14 md:h-16" />
-          </div>
+      <div className="pointer-events-none fixed inset-0 opacity-40">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.25),transparent_55%),radial-gradient(circle_at_80%_30%,rgba(56,189,248,0.18),transparent_60%),radial-gradient(circle_at_50%_80%,rgba(168,85,247,0.12),transparent_60%)]" />
+      </div>
 
-          <p className="text-sm text-white/90 text-center">
-            Încarcă fișiere, primești link de share, apoi poți trimite pe email.
-          </p>
-        </CardHeader>
-
-        <CardContent className="space-y-5">
-          {/* Dropzone / picker */}
-          <div
-            className="border-2 border-dashed border-slate-700 rounded-xl p-6 md:p-8
-                       bg-slate-950/40 hover:border-indigo-500 transition
-                       flex flex-col items-center gap-4 text-center"
-          >
-            <p className="text-white/80 text-sm">
-              Drag & drop fișiere aici sau alege manual
-            </p>
-
-            <Input
-              type="file"
-              multiple
-              onChange={(e) => addFiles(e.target.files)}
-              className="max-w-xs text-white"
+      <Card className="relative w-full max-w-3xl bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
+        <CardContent className="p-8 space-y-6">
+          {/* LOGO (mai mare) */}
+          <div className="flex items-center justify-center">
+            <img
+              src={logo}
+              alt="Swift Transfer"
+              className="h-14 md:h-16 w-auto opacity-95 select-none"
+              draggable={false}
             />
+          </div>
 
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={handleUpload}
-                disabled={isUploading || isFinalizing}
-              >
-                {isUploading
-                  ? "Uploading..."
-                  : isFinalizing
-                  ? "Finalizing..."
-                  : "Upload"}
-              </Button>
+          <div className="text-center text-slate-100/90">
+            Încarcă fișiere, primești link de share, apoi poți trimite pe email.
+          </div>
 
-              <Button
-                variant="secondary"
-                onClick={clearAll}
-                disabled={isUploading || isFinalizing || files.length === 0}
-              >
-                Clear all
-              </Button>
-            </div>
+          {/* DROP ZONE (mai mare) */}
+          <div
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            className={[
+              "rounded-xl border-2 border-dashed p-10 md:p-12 transition",
+              isDragOver
+                ? "border-indigo-400/70 bg-indigo-500/10"
+                : "border-slate-700/70 bg-slate-950/20",
+            ].join(" ")}
+          >
+            <div className="text-center space-y-5">
+              <div className="text-slate-100 font-medium">
+                Drag & drop fișiere aici sau alege manual
+              </div>
 
-            <div className="text-xs text-white/60">
-              {files.length} fișier(e) • {formatBytes(totalSize)}
+              {/* INPUT ascuns + buton vizibil */}
+              <div className="flex flex-col md:flex-row items-center justify-center gap-3">
+                <input
+                  ref={fileInputRef}
+                  id="filePicker"
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => addFiles(e.target.files)}
+                />
+
+                <label htmlFor="filePicker">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="cursor-pointer"
+                    disabled={busy}
+                    asChild
+                  >
+                    <span>Select files</span>
+                  </Button>
+                </label>
+
+                <Button onClick={handleUpload} disabled={busy || !files.length}>
+                  {isUploading
+                    ? "Uploading..."
+                    : isFinalizing
+                    ? "Finalizing..."
+                    : "Upload"}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={clearAll}
+                  disabled={busy && files.length > 0}
+                >
+                  Clear all
+                </Button>
+              </div>
+
+              <div className="text-sm text-slate-200/80">
+                {files.length} fișier(e) • {formatBytes(totalSize)}
+              </div>
             </div>
           </div>
 
-          {/* Selected files */}
+          {/* FILE LIST */}
           {files.length > 0 && (
             <div className="space-y-2">
-              <div className="text-sm text-white/80">Selected files</div>
+              <div className="text-sm text-slate-200/90">Selected files</div>
 
-              {files.map((f) => (
-                <div
-                  key={f.id}
-                  className="flex items-center justify-between rounded-md
-                             border border-slate-800 bg-slate-950/40 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-white">{f.file.name}</div>
-                    <div className="text-xs text-white/60">
-                      {formatBytes(f.file.size)}
-                    </div>
-                  </div>
-
-                  <Button
-                    variant="secondary"
-                    onClick={() => removeFile(f.id)}
-                    disabled={isUploading || isFinalizing}
+              <div className="space-y-2">
+                {files.map((f) => (
+                  <div
+                    key={f.id}
+                    className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/25 px-4 py-3"
                   >
-                    Remove
-                  </Button>
-                </div>
-              ))}
+                    <div className="min-w-0">
+                      <div className="truncate text-slate-100">
+                        {f.file.name}
+                      </div>
+                      <div className="text-xs text-slate-300/80">
+                        {formatBytes(f.file.size)}
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="secondary"
+                      onClick={() => removeFile(f.id)}
+                      disabled={busy}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
-          {/* Status / error */}
+          {/* STATUS / ERROR */}
           {status && (
-            <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3 text-sm text-white">
+            <div className="rounded-lg border border-slate-800 bg-slate-950/25 p-4 text-sm text-slate-100">
               {status}
             </div>
           )}
 
           {error && (
-            <div className="rounded-md border border-red-900 bg-red-950/40 p-3 text-sm text-red-200">
+            <div className="rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-100">
               {error}
             </div>
           )}
 
-          {/* Share link */}
+          {/* SHARE LINK + EMAIL (doar după upload) */}
           {shareUrl && (
-            <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3 text-sm space-y-3">
-              <div className="font-medium text-green-400">✅ Share link</div>
+            <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-950/25 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-slate-100 font-medium">✅ Share link</div>
 
-              <div className="flex items-center gap-2">
-                <input
-                  value={shareUrl}
-                  readOnly
-                  className="flex-1 rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-white"
-                />
-                <Button
-                  onClick={() => navigator.clipboard.writeText(shareUrl)}
-                  disabled={!shareUrl}
-                >
-                  Copy
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => window.open(shareUrl, "_blank", "noopener,noreferrer")}
-                >
-                  Open
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => window.open(shareUrl, "_blank", "noopener,noreferrer")}
+                  >
+                    Open
+                  </Button>
+                  <Button
+                    onClick={() => navigator.clipboard.writeText(shareUrl)}
+                  >
+                    Copy
+                  </Button>
+                </div>
               </div>
 
-              {/* Email */}
-              <div className="pt-2 border-t border-slate-800 space-y-2">
-                <div className="text-sm text-white/80 font-medium">
-                  Send share link by email
+              <div className="text-xs text-slate-200/80 break-all">
+                {shareUrl}
+              </div>
+
+              <div className="pt-2 border-t border-slate-800/70">
+                <div className="text-sm text-slate-100 font-medium mb-2">
+                  Share via email
                 </div>
 
-                <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <Input
                     value={emailTo}
                     onChange={(e) => setEmailTo(e.target.value)}
                     placeholder="recipient@email.com"
+                    disabled={isSendingEmail}
                   />
-                  <textarea
+
+                  <Input
                     value={emailMsg}
                     onChange={(e) => setEmailMsg(e.target.value)}
-                    placeholder="Optional message..."
-                    className="min-h-[84px] rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-white placeholder:text-white/40"
+                    placeholder="Optional message…"
+                    disabled={isSendingEmail}
                   />
 
                   <Button
                     onClick={handleSendEmail}
                     disabled={isSendingEmail}
-                    className="self-start"
                   >
                     {isSendingEmail ? "Sending..." : "Send"}
                   </Button>
-
-                  {emailStatus && (
-                    <div className="text-xs text-white/70">{emailStatus}</div>
-                  )}
                 </div>
+
+                {emailStatus && (
+                  <div className="mt-3 text-sm text-slate-100/90">
+                    {emailStatus}
+                  </div>
+                )}
               </div>
             </div>
           )}
-
-          <div className="text-xs text-white/40">API: {API_BASE}</div>
         </CardContent>
       </Card>
     </div>
