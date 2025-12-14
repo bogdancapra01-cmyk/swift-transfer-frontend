@@ -95,7 +95,7 @@ function UploadPage() {
     setEmailStatus("");
 
     if (!files.length) {
-      setError("Selectează cel puțin un fișier.");
+      setError("Please select at least one file");
       return;
     }
 
@@ -271,13 +271,13 @@ function UploadPage() {
             <img
               src={logo}
               alt="Swift Transfer"
-              className="h-32 md:h-36 w-auto opacity-95 select-none"
+              className="h-48 md:h-56 w-auto opacity-95 select-none"
               draggable={false}
             />
           </div>
 
           <div className="text-center text-slate-100/90">
-            Încarcă fișiere, primești link de share, apoi poți trimite pe email.
+            Upload your files, get a secure sharing link, and send it via email.
           </div>
 
           {/* DROP ZONE (mai mare) */}
@@ -294,7 +294,7 @@ function UploadPage() {
           >
             <div className="text-center space-y-5">
               <div className="text-slate-100 font-medium">
-                Drag & drop fișiere aici sau alege manual
+                Drag & drop files
               </div>
 
               {/* INPUT ascuns + buton vizibil */}
@@ -339,7 +339,7 @@ function UploadPage() {
               </div>
 
               <div className="text-sm text-slate-200/80">
-                {files.length} fișier(e) • {formatBytes(totalSize)}
+                {files.length} file(s) • {formatBytes(totalSize)}
               </div>
             </div>
           </div>
