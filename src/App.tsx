@@ -271,7 +271,7 @@ function UploadPage() {
             <img
               src={logo}
               alt="Swift Transfer"
-              className="h-14 md:h-16 w-auto opacity-95 select-none"
+              className="h-24 md:h-28 w-auto opacity-95 select-none"
               draggable={false}
             />
           </div>
