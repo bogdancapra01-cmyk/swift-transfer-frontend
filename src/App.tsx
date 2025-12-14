@@ -42,6 +42,13 @@ function UploadPage() {
   const [error, setError] = useState<string>("");
 
   const [shareUrl, setShareUrl] = useState<string>("");
+
+  // Email share UI
+  const [emailTo, setEmailTo] = useState("");
+  const [emailMsg, setEmailMsg] = useState("");
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<string>("");
+
   const [isFinalizing, setIsFinalizing] = useState(false);
 
   const totalSize = useMemo(
@@ -49,10 +56,17 @@ function UploadPage() {
     [files]
   );
 
+  function resetShareAndEmailUI() {
+    setShareUrl("");
+    setEmailStatus("");
+    setEmailTo("");
+    setEmailMsg("");
+  }
+
   function addFiles(list: FileList | null) {
     if (!list) return;
 
-    setShareUrl("");
+    resetShareAndEmailUI();
 
     const incoming: SelectedFile[] = Array.from(list).map((file) => ({
       file,
@@ -62,14 +76,14 @@ function UploadPage() {
   }
 
   function removeFile(id: string) {
-    setShareUrl("");
+    resetShareAndEmailUI();
     setFiles((prev) => prev.filter((f) => f.id !== id));
   }
 
   async function handleUpload() {
     setError("");
     setStatus("");
-    setShareUrl("");
+    resetShareAndEmailUI();
 
     if (!files.length) {
       setError("Selectează cel puțin un fișier.");
@@ -170,6 +184,51 @@ function UploadPage() {
     }
   }
 
+  async function handleSendEmail() {
+    try {
+      setEmailStatus("");
+      setError("");
+
+      if (!shareUrl) {
+        setEmailStatus("Nu există share link încă.");
+        return;
+      }
+      if (!emailTo.trim()) {
+        setEmailStatus("Introdu o adresă de email.");
+        return;
+      }
+
+      // Extragem transferId din shareUrl (ultimul segment)
+      const transferId = shareUrl.split("/").filter(Boolean).pop();
+      if (!transferId) {
+        setEmailStatus("Nu pot extrage transferId din shareUrl.");
+        return;
+      }
+
+      setIsSendingEmail(true);
+
+      const res = await fetch(`${API_BASE}/api/transfers/${transferId}/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: emailTo.trim(),
+          message: emailMsg.trim() || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Email failed (${res.status}): ${text}`);
+      }
+
+      setEmailStatus("✅ Email trimis!");
+    } catch (e: unknown) {
+      setEmailStatus(e instanceof Error ? e.message : "Email failed");
+    } finally {
+      setIsSendingEmail(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
       <Card className="w-full max-w-2xl bg-slate-900/60 border-slate-800">
@@ -183,7 +242,11 @@ function UploadPage() {
 
         <CardContent className="space-y-4">
           <div className="flex items-center gap-3">
-            <Input type="file" multiple onChange={(e) => addFiles(e.target.files)} />
+            <Input
+              type="file"
+              multiple
+              onChange={(e) => addFiles(e.target.files)}
+            />
             <Button onClick={handleUpload} disabled={isUploading || isFinalizing}>
               {isUploading
                 ? "Uploading..."
@@ -234,8 +297,9 @@ function UploadPage() {
             </div>
           )}
 
+          {/* Share link + email (only after upload) */}
           {shareUrl && (
-            <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3 text-sm space-y-2">
+            <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3 text-sm space-y-3">
               <div className="font-medium text-green-400">✅ Share link</div>
 
               <div className="flex items-center gap-2">
@@ -252,7 +316,41 @@ function UploadPage() {
                 </Button>
               </div>
 
-              <div className="text-xs text-slate-400 break-all">{shareUrl}</div>
+              <div className="h-px bg-slate-800" />
+
+              <div className="space-y-2">
+                <div className="font-medium text-slate-200">📧 Share via email</div>
+
+                <input
+                  value={emailTo}
+                  onChange={(e) => setEmailTo(e.target.value)}
+                  placeholder="ex: nume@email.com"
+                  className="w-full rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100"
+                />
+
+                <textarea
+                  value={emailMsg}
+                  onChange={(e) => setEmailMsg(e.target.value)}
+                  placeholder="(opțional) Mesaj"
+                  rows={3}
+                  className="w-full resize-none rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100"
+                />
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={handleSendEmail}
+                    disabled={isSendingEmail || !emailTo.trim()}
+                  >
+                    {isSendingEmail ? "Sending..." : "Send"}
+                  </Button>
+
+                  {emailStatus && (
+                    <div className="text-xs text-slate-300 break-words">
+                      {emailStatus}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
