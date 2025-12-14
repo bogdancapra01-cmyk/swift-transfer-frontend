@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
@@ -36,54 +36,119 @@ const API_BASE =
   "https://swift-transfer-be-829099680012.europe-west1.run.app";
 
 function UploadPage() {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
   const [files, setFiles] = useState<SelectedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
+
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
 
   const [shareUrl, setShareUrl] = useState<string>("");
 
-  // Email share UI
+  // Email UI (apare doar după shareUrl)
   const [emailTo, setEmailTo] = useState("");
   const [emailMsg, setEmailMsg] = useState("");
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailStatus, setEmailStatus] = useState<string>("");
 
-  const [isFinalizing, setIsFinalizing] = useState(false);
+  // UI polish states
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [uploadedCount, setUploadedCount] = useState(0);
+  const [copyHint, setCopyHint] = useState<string>("");
 
   const totalSize = useMemo(
     () => files.reduce((sum, f) => sum + f.file.size, 0),
     [files]
   );
 
-  function resetShareAndEmailUI() {
+  const totalCount = files.length;
+
+  const progressPct = useMemo(() => {
+    if (!totalCount) return 0;
+    return Math.round((uploadedCount / totalCount) * 100);
+  }, [uploadedCount, totalCount]);
+
+  function resetShareAndEmail() {
     setShareUrl("");
     setEmailStatus("");
-    setEmailTo("");
-    setEmailMsg("");
+    setCopyHint("");
   }
 
   function addFiles(list: FileList | null) {
     if (!list) return;
 
-    resetShareAndEmailUI();
+    resetShareAndEmail();
 
-    const incoming: SelectedFile[] = Array.from(list).map((file) => ({
-      file,
-      id: crypto.randomUUID(),
-    }));
-    setFiles((prev) => [...prev, ...incoming]);
+    const incoming = Array.from(list);
+
+    // evităm duplicate simple (name + size)
+    const existingKeys = new Set(files.map((f) => `${f.file.name}__${f.file.size}`));
+
+    const mapped: SelectedFile[] = incoming
+      .filter((file) => !existingKeys.has(`${file.name}__${file.size}`))
+      .map((file) => ({
+        file,
+        id: crypto.randomUUID(),
+      }));
+
+    if (!mapped.length) return;
+
+    setFiles((prev) => [...prev, ...mapped]);
   }
 
   function removeFile(id: string) {
-    resetShareAndEmailUI();
+    resetShareAndEmail();
     setFiles((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  function clearAll() {
+    resetShareAndEmail();
+    setError("");
+    setStatus("");
+    setUploadedCount(0);
+    setFiles([]);
+    setEmailTo("");
+    setEmailMsg("");
+  }
+
+  function openFilePicker() {
+    inputRef.current?.click();
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    if (isUploading || isFinalizing || isSendingEmail) return;
+
+    if (e.dataTransfer?.files?.length) {
+      addFiles(e.dataTransfer.files);
+    }
+  }
+
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isUploading || isFinalizing || isSendingEmail) return;
+    setIsDragOver(true);
+  }
+
+  function onDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
   }
 
   async function handleUpload() {
     setError("");
     setStatus("");
-    resetShareAndEmailUI();
+    setEmailStatus("");
+    setShareUrl("");
+    setCopyHint("");
+    setUploadedCount(0);
 
     if (!files.length) {
       setError("Selectează cel puțin un fișier.");
@@ -93,7 +158,8 @@ function UploadPage() {
     setIsUploading(true);
 
     try {
-      // 1) init transfer (get signed upload URLs)
+      // 1) init transfer
+      setStatus("Initializing transfer...");
       const initPayload = {
         files: files.map((f) => ({
           name: f.file.name,
@@ -119,13 +185,15 @@ function UploadPage() {
         throw new Error("Init response missing uploads.");
       }
 
-      setStatus(`Init OK. Uploading ${initJson.uploads.length} file(s)...`);
+      setStatus(`Uploading ${initJson.uploads.length} file(s)...`);
 
-      // 2) upload each file directly to GCS using signed URL
+      // 2) upload to signed URLs
       for (let i = 0; i < initJson.uploads.length; i++) {
         const upload = initJson.uploads[i];
         const file = files[i]?.file;
         if (!file) continue;
+
+        setStatus(`Uploading ${i + 1}/${initJson.uploads.length}: ${file.name}`);
 
         const putRes = await fetch(upload.uploadUrl, {
           method: "PUT",
@@ -137,15 +205,13 @@ function UploadPage() {
 
         if (!putRes.ok) {
           const text = await putRes.text();
-          throw new Error(
-            `Upload failed for ${file.name}: ${putRes.status} ${text}`
-          );
+          throw new Error(`Upload failed for ${file.name}: ${putRes.status} ${text}`);
         }
 
-        setStatus(`Uploaded ${i + 1}/${initJson.uploads.length}: ${file.name}`);
+        setUploadedCount((prev) => prev + 1);
       }
 
-      // 3) COMPLETE transfer (mark ready + get shareUrl)
+      // 3) complete transfer
       setIsFinalizing(true);
       setStatus("Finalizing transfer (generating share link)...");
 
@@ -181,6 +247,18 @@ function UploadPage() {
     } finally {
       setIsFinalizing(false);
       setIsUploading(false);
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopyHint("Copied!");
+      setTimeout(() => setCopyHint(""), 1200);
+    } catch {
+      setCopyHint("Copy failed");
+      setTimeout(() => setCopyHint(""), 1500);
     }
   }
 
@@ -229,62 +307,123 @@ function UploadPage() {
     }
   }
 
+  const busy = isUploading || isFinalizing || isSendingEmail;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-      <Card className="w-full max-w-2xl bg-slate-900/60 border-slate-800">
-        <CardHeader>
+      <Card className="w-full max-w-3xl bg-slate-900/60 border-slate-800">
+        <CardHeader className="space-y-2">
           <CardTitle className="text-2xl">Swift Transfer 🚀</CardTitle>
           <p className="text-sm text-slate-300">
-            Încarcă fișiere și generăm link-uri de upload (pasul următor: share
-            link + email).
+            Încarcă fișiere, primești link de share, apoi poți trimite pe email.
           </p>
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Input
-              type="file"
-              multiple
-              onChange={(e) => addFiles(e.target.files)}
-            />
-            <Button onClick={handleUpload} disabled={isUploading || isFinalizing}>
-              {isUploading
-                ? "Uploading..."
-                : isFinalizing
-                ? "Finalizing..."
-                : "Upload"}
-            </Button>
+          {/* Dropzone */}
+          <div
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            className={[
+              "rounded-xl border border-dashed p-5 transition",
+              isDragOver ? "border-slate-300 bg-slate-950/60" : "border-slate-800 bg-slate-950/40",
+              busy ? "opacity-70" : "",
+            ].join(" ")}
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <div className="text-sm font-medium">
+                  Drag & drop aici sau alege fișiere
+                </div>
+                <div className="text-xs text-slate-400">
+                  {totalCount ? (
+                    <>
+                      {totalCount} fișier(e) • {formatBytes(totalSize)}
+                    </>
+                  ) : (
+                    <>Nu ai selectat fișiere încă.</>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  ref={inputRef}
+                  className="hidden"
+                  type="file"
+                  multiple
+                  onChange={(e) => addFiles(e.target.files)}
+                />
+
+                <Button variant="secondary" onClick={openFilePicker} disabled={busy}>
+                  Choose files
+                </Button>
+
+                <Button onClick={handleUpload} disabled={busy || !files.length}>
+                  {isUploading ? "Uploading..." : isFinalizing ? "Finalizing..." : "Upload"}
+                </Button>
+              </div>
+            </div>
+
+            {/* Progress */}
+            {totalCount > 0 && (isUploading || isFinalizing) && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <span>
+                    Progress: {uploadedCount}/{totalCount}
+                  </span>
+                  <span>{progressPct}%</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full bg-slate-200/80"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="text-sm text-slate-300">
-            {files.length} fișier(e) • {formatBytes(totalSize)}
-          </div>
-
+          {/* File list + actions */}
           {files.length > 0 && (
             <div className="space-y-2">
-              {files.map((f) => (
-                <div
-                  key={f.id}
-                  className="flex items-center justify-between rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate">{f.file.name}</div>
-                    <div className="text-xs text-slate-400">
-                      {formatBytes(f.file.size)}
-                    </div>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    onClick={() => removeFile(f.id)}
-                    disabled={isUploading || isFinalizing}
-                  >
-                    Remove
-                  </Button>
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-300">
+                  Selected files
                 </div>
-              ))}
+                <Button variant="ghost" onClick={clearAll} disabled={busy}>
+                  Clear all
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {files.map((f) => (
+                  <div
+                    key={f.id}
+                    className="flex items-center justify-between rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate">{f.file.name}</div>
+                      <div className="text-xs text-slate-400">
+                        {formatBytes(f.file.size)}
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="secondary"
+                      onClick={() => removeFile(f.id)}
+                      disabled={busy}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
+          {/* Status / Error */}
           {status && (
             <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3 text-sm">
               {status}
@@ -297,59 +436,62 @@ function UploadPage() {
             </div>
           )}
 
-          {/* Share link + email (only after upload) */}
+          {/* Share link card */}
           {shareUrl && (
-            <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3 text-sm space-y-3">
-              <div className="font-medium text-green-400">✅ Share link</div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  value={shareUrl}
-                  readOnly
-                  className="flex-1 rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100"
-                />
-                <Button
-                  onClick={() => navigator.clipboard.writeText(shareUrl)}
-                  disabled={!shareUrl}
-                >
-                  Copy
-                </Button>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="font-medium text-green-400">✅ Share link</div>
+                <div className="flex gap-2">
+                  <Button variant="secondary" onClick={() => window.open(shareUrl, "_blank")}>
+                    Open
+                  </Button>
+                  <Button onClick={handleCopyLink} disabled={!shareUrl}>
+                    Copy
+                  </Button>
+                </div>
               </div>
 
-              <div className="h-px bg-slate-800" />
+              {copyHint && (
+                <div className="text-xs text-slate-300">{copyHint}</div>
+              )}
 
-              <div className="space-y-2">
-                <div className="font-medium text-slate-200">📧 Share via email</div>
+              <input
+                value={shareUrl}
+                readOnly
+                className="w-full rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100"
+              />
 
-                <input
-                  value={emailTo}
-                  onChange={(e) => setEmailTo(e.target.value)}
-                  placeholder="ex: nume@email.com"
-                  className="w-full rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100"
-                />
+              {/* Email UI appears only after shareUrl */}
+              <div className="pt-2 border-t border-slate-800 space-y-2">
+                <div className="text-sm font-medium text-slate-200">
+                  Send share link by email
+                </div>
 
-                <textarea
-                  value={emailMsg}
-                  onChange={(e) => setEmailMsg(e.target.value)}
-                  placeholder="(opțional) Mesaj"
-                  rows={3}
-                  className="w-full resize-none rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100"
-                />
-
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input
+                    placeholder="recipient@email.com"
+                    value={emailTo}
+                    onChange={(e) => setEmailTo(e.target.value)}
+                    disabled={isSendingEmail}
+                  />
                   <Button
                     onClick={handleSendEmail}
                     disabled={isSendingEmail || !emailTo.trim()}
                   >
                     {isSendingEmail ? "Sending..." : "Send"}
                   </Button>
-
-                  {emailStatus && (
-                    <div className="text-xs text-slate-300 break-words">
-                      {emailStatus}
-                    </div>
-                  )}
                 </div>
+
+                <Input
+                  placeholder="Optional message..."
+                  value={emailMsg}
+                  onChange={(e) => setEmailMsg(e.target.value)}
+                  disabled={isSendingEmail}
+                />
+
+                {emailStatus && (
+                  <div className="text-xs text-slate-300">{emailStatus}</div>
+                )}
               </div>
             </div>
           )}
