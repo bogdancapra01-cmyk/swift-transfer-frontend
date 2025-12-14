@@ -27,7 +27,7 @@ function formatBytes(bytes: number) {
 
 const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ??
-  "https://swift-transfer-be-829099680012.europe-west1.run.app/";
+  "https://swift-transfer-be-829099680012.europe-west1.run.app";
 
 export default function App() {
   const [files, setFiles] = useState<SelectedFile[]>([]);
