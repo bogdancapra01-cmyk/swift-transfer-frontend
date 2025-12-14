@@ -20,6 +20,12 @@ type TransferResponse = {
   files: TransferFile[];
 };
 
+type DownloadUrlResponse = {
+  ok: boolean;
+  url?: string;
+  error?: string;
+};
+
 const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   "https://swift-transfer-be-829099680012.europe-west1.run.app";
@@ -38,6 +44,8 @@ export default function TransferPage() {
   const [data, setData] = useState<TransferResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
+
+  const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null);
 
   const totalSize = useMemo(() => {
     if (!data?.files?.length) return 0;
@@ -81,6 +89,40 @@ export default function TransferPage() {
       cancelled = true;
     };
   }, [transferId]);
+
+  async function handleDownload(idx: number) {
+    try {
+      setError("");
+
+      if (!transferId) {
+        throw new Error("Missing transferId in URL.");
+      }
+
+      setDownloadingIndex(idx);
+
+      const res = await fetch(
+        `${API_BASE}/api/transfers/${transferId}/files/${idx}/download`
+      );
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Download link failed (${res.status}): ${text}`);
+      }
+
+      const json = (await res.json()) as DownloadUrlResponse;
+
+      if (!json.url) {
+        throw new Error(json.error || "Missing download url.");
+      }
+
+      // Deschide signed URL într-un tab nou (browserul va descărca fișierul)
+      window.open(json.url, "_blank", "noopener,noreferrer");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Download failed");
+    } finally {
+      setDownloadingIndex(null);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
@@ -145,9 +187,12 @@ export default function TransferPage() {
                         </div>
                       </div>
 
-                      {/* NEXT STEP: aici punem download link */}
-                      <Button variant="secondary" disabled>
-                        Download (next)
+                      <Button
+                        variant="secondary"
+                        onClick={() => handleDownload(idx)}
+                        disabled={downloadingIndex === idx}
+                      >
+                        {downloadingIndex === idx ? "Generating..." : "Download"}
                       </Button>
                     </div>
                   ))
