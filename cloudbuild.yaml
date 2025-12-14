@@ -3,7 +3,8 @@ steps:
     args:
       - build
       - --build-arg
-      - VITE_API_URL=https://SWIFT-TRANSFER-BE-URL-AICI
+      - VITE_API_URL=https://swift-transfer-be-829099680012.europe-west1.run.app
+
       - -t
       - europe-west1-docker.pkg.dev/wave9-calind-447214/swift-transfer-repo/swift-transfer-fe:$COMMIT_SHA
       - .
