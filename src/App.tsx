@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
+import { Routes, Route } from "react-router-dom";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Input } from "./components/ui/input";
+import TransferPage from "./pages/TransferPage";
 
 type SelectedFile = {
   file: File;
@@ -33,13 +35,12 @@ const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   "https://swift-transfer-be-829099680012.europe-west1.run.app";
 
-export default function App() {
+function UploadPage() {
   const [files, setFiles] = useState<SelectedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
 
-  // NEW
   const [shareUrl, setShareUrl] = useState<string>("");
   const [isFinalizing, setIsFinalizing] = useState(false);
 
@@ -51,7 +52,6 @@ export default function App() {
   function addFiles(list: FileList | null) {
     if (!list) return;
 
-    // dacă adaugi fișiere noi, invalidăm link-ul vechi
     setShareUrl("");
 
     const incoming: SelectedFile[] = Array.from(list).map((file) => ({
@@ -62,7 +62,6 @@ export default function App() {
   }
 
   function removeFile(id: string) {
-    // dacă schimbi lista de fișiere, invalidăm link-ul vechi
     setShareUrl("");
     setFiles((prev) => prev.filter((f) => f.id !== id));
   }
@@ -235,7 +234,6 @@ export default function App() {
             </div>
           )}
 
-          {/* NEW: Share link UI */}
           {shareUrl && (
             <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3 text-sm space-y-2">
               <div className="font-medium text-green-400">✅ Share link</div>
@@ -254,9 +252,7 @@ export default function App() {
                 </Button>
               </div>
 
-              <div className="text-xs text-slate-400 break-all">
-                {shareUrl}
-              </div>
+              <div className="text-xs text-slate-400 break-all">{shareUrl}</div>
             </div>
           )}
 
@@ -264,5 +260,14 @@ export default function App() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<UploadPage />} />
+      <Route path="/t/:transferId" element={<TransferPage />} />
+    </Routes>
   );
 }
