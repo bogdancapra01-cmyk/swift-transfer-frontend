@@ -16,6 +16,10 @@ type InitResponse = {
   }>;
 };
 
+type CompleteResponse = {
+  shareUrl: string;
+};
+
 function formatBytes(bytes: number) {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -35,6 +39,10 @@ export default function App() {
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
 
+  // NEW
+  const [shareUrl, setShareUrl] = useState<string>("");
+  const [isFinalizing, setIsFinalizing] = useState(false);
+
   const totalSize = useMemo(
     () => files.reduce((sum, f) => sum + f.file.size, 0),
     [files]
@@ -42,6 +50,10 @@ export default function App() {
 
   function addFiles(list: FileList | null) {
     if (!list) return;
+
+    // dacă adaugi fișiere noi, invalidăm link-ul vechi
+    setShareUrl("");
+
     const incoming: SelectedFile[] = Array.from(list).map((file) => ({
       file,
       id: crypto.randomUUID(),
@@ -50,12 +62,15 @@ export default function App() {
   }
 
   function removeFile(id: string) {
+    // dacă schimbi lista de fișiere, invalidăm link-ul vechi
+    setShareUrl("");
     setFiles((prev) => prev.filter((f) => f.id !== id));
   }
 
   async function handleUpload() {
     setError("");
     setStatus("");
+    setShareUrl("");
 
     if (!files.length) {
       setError("Selectează cel puțin un fișier.");
@@ -109,18 +124,49 @@ export default function App() {
 
         if (!putRes.ok) {
           const text = await putRes.text();
-          throw new Error(`Upload failed for ${file.name}: ${putRes.status} ${text}`);
+          throw new Error(
+            `Upload failed for ${file.name}: ${putRes.status} ${text}`
+          );
         }
 
         setStatus(`Uploaded ${i + 1}/${initJson.uploads.length}: ${file.name}`);
       }
 
-      setStatus(
-        `✅ Upload complete. transferId: ${initJson.transferId} (next: share link)`
-      );
+      // 3) COMPLETE transfer (mark ready + get shareUrl)
+      setIsFinalizing(true);
+      setStatus("Finalizing transfer (generating share link)...");
+
+      const completeRes = await fetch(`${API_BASE}/api/transfers/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transferId: initJson.transferId,
+          files: files.map((f, i) => ({
+            name: f.file.name,
+            type: f.file.type || "application/octet-stream",
+            size: f.file.size,
+            objectPath: initJson.uploads[i]?.objectPath,
+          })),
+        }),
+      });
+
+      if (!completeRes.ok) {
+        const text = await completeRes.text();
+        throw new Error(`Complete failed (${completeRes.status}): ${text}`);
+      }
+
+      const completeJson = (await completeRes.json()) as CompleteResponse;
+
+      if (!completeJson.shareUrl) {
+        throw new Error("Complete response missing shareUrl.");
+      }
+
+      setShareUrl(completeJson.shareUrl);
+      setStatus("✅ Upload complete. Share link generated!");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
+      setIsFinalizing(false);
       setIsUploading(false);
     }
   }
@@ -129,23 +175,22 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
       <Card className="w-full max-w-2xl bg-slate-900/60 border-slate-800">
         <CardHeader>
-          <CardTitle className="text-2xl">
-            Swift Transfer 🚀
-          </CardTitle>
+          <CardTitle className="text-2xl">Swift Transfer 🚀</CardTitle>
           <p className="text-sm text-slate-300">
-            Încarcă fișiere și generăm link-uri de upload (pasul următor: share link + email).
+            Încarcă fișiere și generăm link-uri de upload (pasul următor: share
+            link + email).
           </p>
         </CardHeader>
 
         <CardContent className="space-y-4">
           <div className="flex items-center gap-3">
-            <Input
-              type="file"
-              multiple
-              onChange={(e) => addFiles(e.target.files)}
-            />
-            <Button onClick={handleUpload} disabled={isUploading}>
-              {isUploading ? "Uploading..." : "Upload"}
+            <Input type="file" multiple onChange={(e) => addFiles(e.target.files)} />
+            <Button onClick={handleUpload} disabled={isUploading || isFinalizing}>
+              {isUploading
+                ? "Uploading..."
+                : isFinalizing
+                ? "Finalizing..."
+                : "Upload"}
             </Button>
           </div>
 
@@ -169,7 +214,7 @@ export default function App() {
                   <Button
                     variant="secondary"
                     onClick={() => removeFile(f.id)}
-                    disabled={isUploading}
+                    disabled={isUploading || isFinalizing}
                   >
                     Remove
                   </Button>
@@ -190,9 +235,32 @@ export default function App() {
             </div>
           )}
 
-          <div className="text-xs text-slate-500">
-            API: {API_BASE}
-          </div>
+          {/* NEW: Share link UI */}
+          {shareUrl && (
+            <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3 text-sm space-y-2">
+              <div className="font-medium text-green-400">✅ Share link</div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  value={shareUrl}
+                  readOnly
+                  className="flex-1 rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100"
+                />
+                <Button
+                  onClick={() => navigator.clipboard.writeText(shareUrl)}
+                  disabled={!shareUrl}
+                >
+                  Copy
+                </Button>
+              </div>
+
+              <div className="text-xs text-slate-400 break-all">
+                {shareUrl}
+              </div>
+            </div>
+          )}
+
+          <div className="text-xs text-slate-500">API: {API_BASE}</div>
         </CardContent>
       </Card>
     </div>
