@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 
 type TransferFile = {
@@ -28,7 +28,7 @@ type DownloadUrlResponse = {
 
 const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ??
-  "https://swift-transfer-be-829099680012.europe-west1.run.app";
+  "https://api.swift-transfer.app";
 
 function formatBytes(bytes: number) {
   if (!bytes) return "0 B";
@@ -37,6 +37,43 @@ function formatBytes(bytes: number) {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   const value = bytes / Math.pow(k, i);
   return `${value.toFixed(value >= 10 || i === 0 ? 0 : 1)} ${sizes[i]}`;
+}
+
+function formatDate(ts: number) {
+  try {
+    return new Date(ts).toLocaleString();
+  } catch {
+    return "";
+  }
+}
+
+function StatusPill({ status }: { status?: string }) {
+  const s = (status || "").toLowerCase();
+  const cls =
+    s === "ready"
+      ? "bg-emerald-500/15 text-emerald-200 border-emerald-500/30"
+      : s === "draft"
+      ? "bg-amber-500/15 text-amber-200 border-amber-500/30"
+      : "bg-slate-500/15 text-slate-200 border-slate-500/30";
+
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs ${cls}`}>
+      {status || "unknown"}
+    </span>
+  );
+}
+
+function fileIcon(name: string) {
+  const ext = name.split(".").pop()?.toLowerCase();
+  if (!ext) return "📄";
+  if (["png", "jpg", "jpeg", "webp", "gif", "svg"].includes(ext)) return "🖼️";
+  if (["pdf"].includes(ext)) return "📕";
+  if (["zip", "rar", "7z"].includes(ext)) return "🗜️";
+  if (["mp4", "mov", "mkv", "avi"].includes(ext)) return "🎬";
+  if (["mp3", "wav", "flac"].includes(ext)) return "🎵";
+  if (["doc", "docx"].includes(ext)) return "📝";
+  if (["xls", "xlsx", "csv"].includes(ext)) return "📊";
+  return "📄";
 }
 
 export default function TransferPage() {
@@ -52,6 +89,11 @@ export default function TransferPage() {
     return data.files.reduce((sum, f) => sum + (f.size ?? 0), 0);
   }, [data]);
 
+  const isExpired = useMemo(() => {
+    if (!data?.expiresAt) return false;
+    return Date.now() > data.expiresAt;
+  }, [data?.expiresAt]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -60,9 +102,7 @@ export default function TransferPage() {
         setLoading(true);
         setError("");
 
-        if (!transferId) {
-          throw new Error("Missing transferId in URL.");
-        }
+        if (!transferId) throw new Error("Missing transferId in URL.");
 
         const res = await fetch(`${API_BASE}/api/transfers/${transferId}`);
         if (!res.ok) {
@@ -72,13 +112,9 @@ export default function TransferPage() {
 
         const json = (await res.json()) as TransferResponse;
 
-        if (!cancelled) {
-          setData(json);
-        }
+        if (!cancelled) setData(json);
       } catch (e: unknown) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Unknown error");
-        }
+        if (!cancelled) setError(e instanceof Error ? e.message : "Unknown error");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -93,29 +129,19 @@ export default function TransferPage() {
   async function handleDownload(idx: number) {
     try {
       setError("");
-
-      if (!transferId) {
-        throw new Error("Missing transferId in URL.");
-      }
+      if (!transferId) throw new Error("Missing transferId in URL.");
 
       setDownloadingIndex(idx);
 
-      const res = await fetch(
-        `${API_BASE}/api/transfers/${transferId}/files/${idx}/download`
-      );
-
+      const res = await fetch(`${API_BASE}/api/transfers/${transferId}/files/${idx}/download`);
       if (!res.ok) {
         const text = await res.text();
         throw new Error(`Download link failed (${res.status}): ${text}`);
       }
 
       const json = (await res.json()) as DownloadUrlResponse;
+      if (!json.url) throw new Error(json.error || "Missing download url.");
 
-      if (!json.url) {
-        throw new Error(json.error || "Missing download url.");
-      }
-
-      // Deschide signed URL într-un tab nou (browserul va descărca fișierul)
       window.open(json.url, "_blank", "noopener,noreferrer");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Download failed");
@@ -126,86 +152,134 @@ export default function TransferPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-      <Card className="w-full max-w-2xl bg-slate-900/60 border-slate-800">
-        <CardHeader className="space-y-2">
-          <CardTitle className="text-2xl">Swift Transfer 📥</CardTitle>
-          <div className="text-xs text-slate-400 break-all">
-            Transfer: {transferId}
-          </div>
-        </CardHeader>
+      {/* subtle background glow */}
+      <div className="pointer-events-none fixed inset-0 opacity-40">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(99,102,241,0.22),transparent_55%),radial-gradient(circle_at_85%_30%,rgba(56,189,248,0.14),transparent_60%),radial-gradient(circle_at_50%_85%,rgba(168,85,247,0.10),transparent_60%)]" />
+      </div>
 
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Link to="/">
-              <Button variant="secondary">← Back</Button>
-            </Link>
-
-            {data?.files?.length ? (
-              <div className="text-sm text-slate-300">
-                {data.files.length} fișier(e) • {formatBytes(totalSize)}
+      <Card className="relative w-full max-w-3xl bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
+        <CardContent className="p-8 space-y-6">
+          {/* Header */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-2xl font-semibold text-slate-100">
+                  Transfer
+                </div>
+                <div className="text-xs text-slate-300/80 break-all">
+                  {transferId}
+                </div>
               </div>
-            ) : null}
+
+              <div className="flex items-center gap-2">
+                <StatusPill status={data?.status} />
+              </div>
+            </div>
+
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <Link to="/">
+                <Button variant="secondary">← Back</Button>
+              </Link>
+
+              {data?.files?.length ? (
+                <div className="text-sm text-slate-200/80">
+                  {data.files.length} fișier(e) • {formatBytes(totalSize)}
+                </div>
+              ) : null}
+            </div>
           </div>
 
+          {/* Loading / error */}
           {loading && (
-            <div className="rounded-md border border-slate-800 bg-slate-950/40 p-3 text-sm">
+            <div className="rounded-lg border border-slate-800 bg-slate-950/25 p-4 text-sm text-slate-100">
               Loading transfer...
             </div>
           )}
 
           {error && (
-            <div className="rounded-md border border-red-900 bg-red-950/40 p-3 text-sm text-red-200">
+            <div className="rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-100">
               {error}
             </div>
           )}
 
+          {/* Meta */}
           {!loading && !error && data && (
-            <div className="space-y-2">
-              {data.status && (
-                <div className="text-sm text-slate-300">
-                  Status: <span className="text-slate-100">{data.status}</span>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/20 p-4 space-y-2">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <div className="text-sm text-slate-200/85">
+                  Created: <span className="text-slate-100">{formatDate(data.createdAt)}</span>
+                </div>
+
+                {data.expiresAt ? (
+                  <div className="text-sm text-slate-200/85">
+                    Expires:{" "}
+                    <span className={isExpired ? "text-red-200" : "text-slate-100"}>
+                      {formatDate(data.expiresAt)}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+
+              {isExpired && (
+                <div className="text-sm text-red-200">
+                  ⚠️ This transfer is expired.
                 </div>
               )}
 
-              {data.expiresAt ? (
-                <div className="text-xs text-slate-400">
-                  Expires: {new Date(data.expiresAt).toLocaleString()}
+              {/* Download all (ZIP) – next step */}
+              <div className="pt-3 border-t border-slate-800/70 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div className="text-sm text-slate-200/85">
+                  Tip: poți descărca fișierele individual acum. „Download all (ZIP)” îl facem imediat după.
                 </div>
-              ) : null}
 
-              <div className="mt-3 space-y-2">
-                {data.files?.length ? (
-                  data.files.map((f, idx) => (
+                <Button variant="secondary" disabled>
+                  Download all (ZIP) — next
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Files list */}
+          {!loading && !error && data && (
+            <div className="space-y-2">
+              <div className="text-sm text-slate-200/90 font-medium">
+                Files
+              </div>
+
+              {data.files?.length ? (
+                <div className="space-y-2">
+                  {data.files.map((f, idx) => (
                     <div
                       key={f.objectPath ?? `${f.name}-${idx}`}
-                      className="flex items-center justify-between rounded-md border border-slate-800 bg-slate-950/40 px-3 py-2"
+                      className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/20 px-4 py-3"
                     >
-                      <div className="min-w-0">
-                        <div className="truncate">{f.name}</div>
-                        <div className="text-xs text-slate-400">
-                          {formatBytes(f.size)}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="text-xl">{fileIcon(f.name)}</div>
+                        <div className="min-w-0">
+                          <div className="truncate text-slate-100">{f.name}</div>
+                          <div className="text-xs text-slate-300/80">
+                            {formatBytes(f.size)}
+                          </div>
                         </div>
                       </div>
 
                       <Button
                         variant="secondary"
                         onClick={() => handleDownload(idx)}
-                        disabled={downloadingIndex === idx}
+                        disabled={downloadingIndex === idx || isExpired}
                       >
                         {downloadingIndex === idx ? "Generating..." : "Download"}
                       </Button>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-sm text-slate-300">
-                    No files found for this transfer.
-                  </div>
-                )}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-slate-800 bg-slate-950/25 p-4 text-sm text-slate-200/80">
+                  No files found for this transfer.
+                </div>
+              )}
             </div>
           )}
-
-          <div className="text-xs text-slate-500">API: {API_BASE}</div>
         </CardContent>
       </Card>
     </div>
