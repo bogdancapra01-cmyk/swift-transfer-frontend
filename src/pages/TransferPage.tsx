@@ -197,7 +197,7 @@ export default function TransferPage() {
 
               {data?.files?.length ? (
                 <div className="text-sm text-slate-200/80">
-                  {data.files.length} fișier(e) • {formatBytes(totalSize)}
+                  {data.files.length} file(s) • {formatBytes(totalSize)}
                 </div>
               ) : null}
             </div>
@@ -243,7 +243,7 @@ export default function TransferPage() {
               {/* Download all (ZIP) – next step */}
               <div className="pt-3 border-t border-slate-800/70 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div className="text-sm text-slate-200/85">
-                  Tip: poți descărca fișierele individual acum. „Download all (ZIP)” îl facem imediat după.
+                  You can download files individually or all at once as a single .zip archive.
                 </div>
 
                 <Button
