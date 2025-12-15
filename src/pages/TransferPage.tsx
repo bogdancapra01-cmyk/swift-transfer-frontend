@@ -83,6 +83,20 @@ export default function TransferPage() {
   const [error, setError] = useState<string>("");
 
   const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null);
+  const [downloadingAll, setDownloadingAll] = useState(false);
+
+  function handleDownloadAllZip() {
+  if (!transferId) return;
+
+  setDownloadingAll(true);
+
+  // Deschide endpoint-ul care livrează zip (download)
+  const url = `${API_BASE}/api/transfers/${transferId}/download.zip`;
+  window.open(url, "_blank", "noopener,noreferrer");
+
+  // mic reset UI
+  setTimeout(() => setDownloadingAll(false), 800);
+}
 
   const totalSize = useMemo(() => {
     if (!data?.files?.length) return 0;
@@ -232,8 +246,12 @@ export default function TransferPage() {
                   Tip: poți descărca fișierele individual acum. „Download all (ZIP)” îl facem imediat după.
                 </div>
 
-                <Button variant="secondary" disabled>
-                  Download all (ZIP) — next
+                <Button
+                 variant="secondary"
+                 onClick={handleDownloadAllZip}
+                 disabled={isExpired || !data?.files?.length || downloadingAll}
+                >
+                 {downloadingAll ? "Preparing..." : "Download all (ZIP)"}
                 </Button>
               </div>
             </div>
