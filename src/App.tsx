@@ -5,6 +5,7 @@ import { Card, CardContent } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 import TransferPage from "./pages/TransferPage";
 import logo from "./assets/logo.png";
+import AuthPage from "./pages/AuthPage";
 
 type SelectedFile = {
   file: File;
@@ -462,6 +463,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<UploadPage />} />
       <Route path="/t/:transferId" element={<TransferPage />} />
+      <Route path="/auth" element={<AuthPage />} />
     </Routes>
   );
 }
