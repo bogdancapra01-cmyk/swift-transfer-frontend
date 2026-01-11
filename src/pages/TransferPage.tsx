@@ -93,13 +93,22 @@ async function getIdTokenSafe(): Promise<string | null> {
 }
 
 // ✅ download helper: fetch + blob so Authorization header is sent
-async function downloadBlobWithAuth(url: string, filename: string) {
-  const token = await getIdTokenSafe();
-  if (!token) throw new Error("You must be signed in to download.");
+async function downloadBlobSmart(url: string, filename: string) {
+  const isApiUrl =
+    url.startsWith(API_BASE) || url.startsWith("/") || url.startsWith(".");
+
+  // Dacă e URL extern (ex: GCS signed URL), NU trimitem Authorization (altfel CORS => Failed to fetch)
+  const headers: Record<string, string> = {};
+
+  if (isApiUrl) {
+    const token = await getIdTokenSafe();
+    if (!token) throw new Error("You must be signed in to download.");
+    headers.Authorization = `Bearer ${token}`;
+  }
 
   const res = await fetch(url, {
     method: "GET",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: Object.keys(headers).length ? headers : undefined,
   });
 
   if (!res.ok) {
@@ -204,7 +213,7 @@ export default function TransferPage() {
       // ✅ Previously: window.open(json.url...) (couldn't send auth headers)
       // ✅ Now: fetch the file with Authorization and trigger a real download
       const filename = data?.files?.[idx]?.name || `file-${idx + 1}`;
-      await downloadBlobWithAuth(json.url, filename);
+      await downloadBlobSmart(json.url, filename);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Download failed");
     } finally {
