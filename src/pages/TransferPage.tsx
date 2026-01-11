@@ -92,6 +92,33 @@ async function getIdTokenSafe(): Promise<string | null> {
   }
 }
 
+// ✅ download helper: fetch + blob so Authorization header is sent
+async function downloadBlobWithAuth(url: string, filename: string) {
+  const token = await getIdTokenSafe();
+  if (!token) throw new Error("You must be signed in to download.");
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Download failed (${res.status}): ${text}`);
+  }
+
+  const blob = await res.blob();
+  const blobUrl = window.URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  window.URL.revokeObjectURL(blobUrl);
+}
 
 export default function TransferPage() {
   const { transferId } = useParams();
@@ -174,7 +201,10 @@ export default function TransferPage() {
       const json = (await res.json()) as DownloadUrlResponse;
       if (!json.url) throw new Error(json.error || "Missing download url.");
 
-      window.open(json.url, "_blank", "noopener,noreferrer");
+      // ✅ Previously: window.open(json.url...) (couldn't send auth headers)
+      // ✅ Now: fetch the file with Authorization and trigger a real download
+      const filename = data?.files?.[idx]?.name || `file-${idx + 1}`;
+      await downloadBlobWithAuth(json.url, filename);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Download failed");
     } finally {
