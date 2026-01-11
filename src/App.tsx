@@ -63,7 +63,8 @@ function RequireAuth({ children }: { children: ReactElement }) {
 
 
 function UploadPage() {
-  const { user } = useAuth();
+  const { user, getIdToken } = useAuth();
+
 
   const [files, setFiles] = useState<SelectedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -119,9 +120,15 @@ function UploadPage() {
         })),
       };
 
+      const token = await getIdToken();
+      if (!token) throw new Error("Not authenticated.");
       const initRes = await fetch(`${API_BASE}/api/transfers/init`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+
         body: JSON.stringify(initPayload),
       });
 
@@ -166,7 +173,10 @@ function UploadPage() {
 
       const completeRes = await fetch(`${API_BASE}/api/transfers/complete`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           transferId: initJson.transferId,
           files: files.map((f, i) => ({
@@ -221,9 +231,15 @@ function UploadPage() {
 
       setIsSendingEmail(true);
 
+      const token = await getIdToken();
+      if (!token) throw new Error("Not authenticated.");
+
       const res = await fetch(`${API_BASE}/api/transfers/${transferId}/email`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           to: emailTo.trim(),
           message: emailMsg.trim() || undefined,
