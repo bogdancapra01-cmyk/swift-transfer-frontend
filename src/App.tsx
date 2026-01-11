@@ -473,7 +473,15 @@ export default function App() {
       <Route path="/auth" element={<AuthPage />} />
 
       {/* Transfer page (public) */}
-      <Route path="/t/:transferId" element={<TransferPage />} />
+      <Route
+  path="/t/:transferId"
+  element={
+    <RequireAuth>
+      <TransferPage />
+    </RequireAuth>
+  }
+/>
+
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
