@@ -1,14 +1,17 @@
-import { useMemo, useState } from "react";
-import { Routes, Route } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Button } from "./components/ui/button";
 import { Card, CardContent } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 import TransferPage from "./pages/TransferPage";
-import logo from "./assets/logo.png";
-
+import AuthPage from "./pages/AuthPage";
 
 // Firebase
-import { getAuth, signOut } from "firebase/auth";
+import { getAuth, signOut, onAuthStateChanged } from "firebase/auth";
+import type { User } from "firebase/auth";
+
+// Logo (Upload Page)
+import logo from "./assets/logo.png";
 
 type SelectedFile = {
   file: File;
@@ -39,6 +42,27 @@ function formatBytes(bytes: number) {
 const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   "https://api.swift-transfer.app";
+
+/** Small auth gate */
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const auth = getAuth();
+  const location = useLocation();
+  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [auth]);
+
+  if (loading) return null; // keep it simple; no UI change
+  if (!user) return <Navigate to="/auth" replace state={{ from: location.pathname }} />;
+
+  return <>{children}</>;
+}
 
 function UploadPage() {
   const auth = getAuth();
@@ -101,10 +125,8 @@ function UploadPage() {
     setIsUploading(true);
 
     try {
-      // get firebase token (only if you're using auth-protected init/complete)
       const token = await auth.currentUser?.getIdToken?.();
 
-      // 1) init transfer
       const initPayload = {
         files: files.map((f) => ({
           name: f.file.name,
@@ -135,7 +157,6 @@ function UploadPage() {
 
       setStatus(`Init OK. Uploading ${initJson.uploads.length} file(s)...`);
 
-      // 2) upload each file to GCS signed URL
       for (let i = 0; i < initJson.uploads.length; i++) {
         const upload = initJson.uploads[i];
         const file = files[i]?.file;
@@ -159,7 +180,6 @@ function UploadPage() {
         setStatus(`Uploaded ${i + 1}/${initJson.uploads.length}: ${file.name}`);
       }
 
-      // 3) complete
       setIsFinalizing(true);
       setStatus("Finalizing transfer (generating share link)...");
 
@@ -256,12 +276,11 @@ function UploadPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-      {/* subtle background glow */}
       <div className="pointer-events-none fixed inset-0 opacity-40">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(99,102,241,0.22),transparent_55%),radial-gradient(circle_at_85%_30%,rgba(56,189,248,0.14),transparent_60%),radial-gradient(circle_at_50%_85%,rgba(168,85,247,0.10),transparent_60%)]" />
       </div>
 
-      {/* TOP BAR: email + sign out (TOP-RIGHT like in red area) */}
+      {/* TOP RIGHT: email + sign out */}
       <div className="fixed top-6 right-6 z-50 flex items-center gap-3">
         <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/35 backdrop-blur-xl px-4 py-2 shadow-2xl">
           {userEmail ? (
@@ -280,22 +299,20 @@ function UploadPage() {
 
       <Card className="relative w-full max-w-3xl bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
         <CardContent className="p-8 space-y-6">
-          {/* LOGO (10x bigger) */}
+          {/* LOGO */}
           <div className="flex justify-center pt-2">
-          <img
-          src={logo}
-  alt="Swift Transfer"
-  className="h-28 sm:h-36 md:h-44 lg:h-52 w-auto opacity-95 select-none"
-  draggable={false}
-        
+            <img
+              src={logo}
+              alt="Swift Transfer"
+              className="h-28 sm:h-36 md:h-44 lg:h-52 w-auto opacity-95 select-none"
+              draggable={false}
             />
           </div>
 
           <div className="text-center text-sm md:text-base text-slate-200/90">
-            Încarcă fișiere și generăm share link + email.
+            Upload files, generate a share link, and send it via email.
           </div>
 
-          {/* Upload row */}
           <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
             <div className="flex-1">
               <Input
@@ -331,7 +348,7 @@ function UploadPage() {
           </div>
 
           <div className="text-sm text-slate-200/80">
-            {files.length} fișier(e) • {formatBytes(totalSize)}
+            {files.length} file(s) • {formatBytes(totalSize)}
           </div>
 
           {files.length > 0 && (
@@ -398,7 +415,6 @@ function UploadPage() {
                 </div>
               </div>
 
-              {/* Email */}
               <div className="pt-3 border-t border-slate-800/70 space-y-2">
                 <div className="text-sm text-slate-200/90 font-medium">
                   Send share link by email
@@ -443,8 +459,24 @@ function UploadPage() {
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<UploadPage />} />
+      {/* Default: requires auth; otherwise redirect to /auth */}
+      <Route
+        path="/"
+        element={
+          <RequireAuth>
+            <UploadPage />
+          </RequireAuth>
+        }
+      />
+
+      {/* Auth page */}
+      <Route path="/auth" element={<AuthPage />} />
+
+      {/* Transfer page (public) */}
       <Route path="/t/:transferId" element={<TransferPage />} />
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
