@@ -4,12 +4,19 @@ import { auth } from "../lib/firebase";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { useLocation, useNavigate } from "react-router-dom";
+
+
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [status, setStatus] = useState<string>("");
+  const navigate = useNavigate();
+  const location = useLocation() as any;
+  const from = location?.state?.from ?? "/";
+
 
   async function handleSubmit() {
     setStatus("");
@@ -22,6 +29,7 @@ export default function AuthPage() {
       if (mode === "login") {
         await signInWithEmailAndPassword(auth, email.trim(), pass);
         setStatus("✅ Logged in");
+        navigate(from, { replace: true });
       } else {
         await createUserWithEmailAndPassword(auth, email.trim(), pass);
         setStatus("✅ Account created");

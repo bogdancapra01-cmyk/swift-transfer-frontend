@@ -1,11 +1,14 @@
-import { useMemo, useRef, useState } from "react";
-import { Routes, Route } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Button } from "./components/ui/button";
-import { Card, CardContent } from "./components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 import TransferPage from "./pages/TransferPage";
-import logo from "./assets/logo.png";
 import AuthPage from "./pages/AuthPage";
+import { useAuth } from "./lib/auth";
+import { signOut } from "firebase/auth";
+import { auth } from "./lib/firebase";
+import type { ReactElement } from "react";
 
 type SelectedFile = {
   file: File;
@@ -25,7 +28,7 @@ type CompleteResponse = {
 };
 
 function formatBytes(bytes: number) {
-  if (!bytes) return "0 B";
+  if (bytes === 0) return "0 B";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -37,10 +40,33 @@ const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   "https://api.swift-transfer.app";
 
+function RequireAuth({ children }: { children: ReactElement }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+        <div className="rounded-md border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm">
+          Checking session...
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace state={{ from: location.pathname }} />;
+  }
+
+  return children;
+}
+
+
 function UploadPage() {
+  const { user } = useAuth();
+
   const [files, setFiles] = useState<SelectedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [isFinalizing, setIsFinalizing] = useState(false);
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
 
@@ -50,8 +76,7 @@ function UploadPage() {
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailStatus, setEmailStatus] = useState<string>("");
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
 
   const totalSize = useMemo(
     () => files.reduce((sum, f) => sum + f.file.size, 0),
@@ -60,50 +85,32 @@ function UploadPage() {
 
   function addFiles(list: FileList | null) {
     if (!list) return;
-
     setShareUrl("");
-    setEmailStatus("");
-
     const incoming: SelectedFile[] = Array.from(list).map((file) => ({
       file,
       id: crypto.randomUUID(),
     }));
-
     setFiles((prev) => [...prev, ...incoming]);
   }
 
   function removeFile(id: string) {
     setShareUrl("");
-    setEmailStatus("");
     setFiles((prev) => prev.filter((f) => f.id !== id));
-  }
-
-  function clearAll() {
-    setFiles([]);
-    setShareUrl("");
-    setStatus("");
-    setError("");
-    setEmailStatus("");
-    setEmailTo("");
-    setEmailMsg("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   async function handleUpload() {
     setError("");
     setStatus("");
     setShareUrl("");
-    setEmailStatus("");
 
     if (!files.length) {
-      setError("Please select at least one file");
+      setError("Selectează cel puțin un fișier.");
       return;
     }
 
     setIsUploading(true);
 
     try {
-      // 1) init transfer
       const initPayload = {
         files: files.map((f) => ({
           name: f.file.name,
@@ -131,7 +138,6 @@ function UploadPage() {
 
       setStatus(`Init OK. Uploading ${initJson.uploads.length} file(s)...`);
 
-      // 2) upload each file to GCS signed URL
       for (let i = 0; i < initJson.uploads.length; i++) {
         const upload = initJson.uploads[i];
         const file = files[i]?.file;
@@ -155,7 +161,6 @@ function UploadPage() {
         setStatus(`Uploaded ${i + 1}/${initJson.uploads.length}: ${file.name}`);
       }
 
-      // 3) complete transfer
       setIsFinalizing(true);
       setStatus("Finalizing transfer (generating share link)...");
 
@@ -238,218 +243,126 @@ function UploadPage() {
     }
   }
 
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-    addFiles(e.dataTransfer.files);
-  }
-
-  function onDragOver(e: React.DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
-  }
-
-  function onDragLeave(e: React.DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-  }
-
-  const busy = isUploading || isFinalizing;
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-      <div className="pointer-events-none fixed inset-0 opacity-40">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.25),transparent_55%),radial-gradient(circle_at_80%_30%,rgba(56,189,248,0.18),transparent_60%),radial-gradient(circle_at_50%_80%,rgba(168,85,247,0.12),transparent_60%)]" />
-      </div>
+      <Card className="w-full max-w-2xl bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
+        <CardHeader className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-2xl">Swift Transfer</CardTitle>
 
-      <Card className="relative w-full max-w-3xl bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
-        <CardContent className="p-8 space-y-6">
-          {/* LOGO (mai mare) */}
-          <div className="flex items-center justify-center">
-            <img
-              src={logo}
-              alt="Swift Transfer"
-              className="h-56 md:h-64 w-auto opacity-95 select-none"
-              draggable={false}
-            />
-          </div>
-
-          <div className="text-center text-slate-100/90">
-            Upload your files, get a secure sharing link, and send it via email.
-          </div>
-
-          {/* DROP ZONE (mai mare) */}
-          <div
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            className={[
-              "rounded-xl border-2 border-dashed p-10 md:p-12 transition",
-              isDragOver
-                ? "border-indigo-400/70 bg-indigo-500/10"
-                : "border-slate-700/70 bg-slate-950/20",
-            ].join(" ")}
-          >
-            <div className="text-center space-y-5">
-              <div className="text-slate-100 font-medium">
-                Drag & drop files
+            <div className="flex items-center gap-2">
+              <div className="text-xs text-slate-300/80 hidden sm:block">
+                {user?.email}
               </div>
-
-              {/* INPUT ascuns + buton vizibil */}
-              <div className="flex flex-col md:flex-row items-center justify-center gap-3">
-                <input
-                  ref={fileInputRef}
-                  id="filePicker"
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => addFiles(e.target.files)}
-                />
-
-                <label htmlFor="filePicker">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="cursor-pointer"
-                    disabled={busy}
-                    asChild
-                  >
-                    <span>Select files</span>
-                  </Button>
-                </label>
-
-                <Button onClick={handleUpload} disabled={busy || !files.length}>
-                  {isUploading
-                    ? "Uploading..."
-                    : isFinalizing
-                    ? "Finalizing..."
-                    : "Upload"}
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={clearAll}
-                  disabled={busy && files.length > 0}
-                >
-                  Clear all
-                </Button>
-              </div>
-
-              <div className="text-sm text-slate-200/80">
-                {files.length} file(s) • {formatBytes(totalSize)}
-              </div>
+              <Button
+                variant="secondary"
+                onClick={() => signOut(auth)}
+                className="h-9"
+              >
+                Sign out
+              </Button>
             </div>
           </div>
 
-          {/* FILE LIST */}
+          <p className="text-sm text-slate-200/80">
+            Încarcă fișiere și generăm share link + email.
+          </p>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Input type="file" multiple onChange={(e) => addFiles(e.target.files)} />
+            <Button onClick={handleUpload} disabled={isUploading || isFinalizing}>
+              {isUploading ? "Uploading..." : isFinalizing ? "Finalizing..." : "Upload"}
+            </Button>
+          </div>
+
+          <div className="text-sm text-slate-200/80">
+            {files.length} fișier(e) • {formatBytes(totalSize)}
+          </div>
+
           {files.length > 0 && (
             <div className="space-y-2">
-              <div className="text-sm text-slate-200/90">Selected files</div>
-
-              <div className="space-y-2">
-                {files.map((f) => (
-                  <div
-                    key={f.id}
-                    className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/25 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate text-slate-100">
-                        {f.file.name}
-                      </div>
-                      <div className="text-xs text-slate-300/80">
-                        {formatBytes(f.file.size)}
-                      </div>
+              {files.map((f) => (
+                <div
+                  key={f.id}
+                  className="flex items-center justify-between rounded-md border border-slate-800 bg-slate-950/30 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-slate-100">{f.file.name}</div>
+                    <div className="text-xs text-slate-300/70">
+                      {formatBytes(f.file.size)}
                     </div>
-
-                    <Button
-                      variant="secondary"
-                      onClick={() => removeFile(f.id)}
-                      disabled={busy}
-                    >
-                      Remove
-                    </Button>
                   </div>
-                ))}
-              </div>
+                  <Button
+                    variant="secondary"
+                    onClick={() => removeFile(f.id)}
+                    disabled={isUploading || isFinalizing}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
             </div>
           )}
 
-          {/* STATUS / ERROR */}
           {status && (
-            <div className="rounded-lg border border-slate-800 bg-slate-950/25 p-4 text-sm text-slate-100">
+            <div className="rounded-md border border-slate-800 bg-slate-950/30 p-3 text-sm text-slate-100">
               {status}
             </div>
           )}
 
           {error && (
-            <div className="rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-100">
+            <div className="rounded-md border border-red-900 bg-red-950/40 p-3 text-sm text-red-200">
               {error}
             </div>
           )}
 
-          {/* SHARE LINK + EMAIL (doar după upload) */}
+          {/* Share link + Email UI */}
           {shareUrl && (
-            <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-950/25 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-slate-100 font-medium">✅ Share link</div>
+            <div className="rounded-md border border-slate-800 bg-slate-950/30 p-4 text-sm space-y-3">
+              <div className="font-medium text-green-400">✅ Share link</div>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => window.open(shareUrl, "_blank", "noopener,noreferrer")}
-                  >
-                    Open
-                  </Button>
-                  <Button
-                    onClick={() => navigator.clipboard.writeText(shareUrl)}
-                  >
-                    Copy
-                  </Button>
-                </div>
+              <div className="flex items-center gap-2">
+                <input
+                  value={shareUrl}
+                  readOnly
+                  className="flex-1 rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100"
+                />
+                <Button onClick={() => navigator.clipboard.writeText(shareUrl)}>
+                  Copy
+                </Button>
               </div>
 
-              <div className="text-xs text-slate-200/80 break-all">
-                {shareUrl}
-              </div>
-
-              <div className="pt-2 border-t border-slate-800/70">
-                <div className="text-sm text-slate-100 font-medium mb-2">
-                  Share via email
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                <div className="space-y-1">
+                  <div className="text-xs text-slate-300/80">Send to email</div>
                   <Input
                     value={emailTo}
                     onChange={(e) => setEmailTo(e.target.value)}
-                    placeholder="recipient@email.com"
-                    disabled={isSendingEmail}
+                    placeholder="name@example.com"
+                    className="text-slate-100 placeholder:text-slate-500"
                   />
+                </div>
 
+                <div className="space-y-1">
+                  <div className="text-xs text-slate-300/80">Optional message</div>
                   <Input
                     value={emailMsg}
                     onChange={(e) => setEmailMsg(e.target.value)}
-                    placeholder="Optional message…"
-                    disabled={isSendingEmail}
+                    placeholder="Short message..."
+                    className="text-slate-100 placeholder:text-slate-500"
                   />
-
-                  <Button
-                    onClick={handleSendEmail}
-                    disabled={isSendingEmail}
-                  >
-                    {isSendingEmail ? "Sending..." : "Send"}
-                  </Button>
                 </div>
-
-                {emailStatus && (
-                  <div className="mt-3 text-sm text-slate-100/90">
-                    {emailStatus}
-                  </div>
-                )}
               </div>
+
+              <Button onClick={handleSendEmail} disabled={isSendingEmail}>
+                {isSendingEmail ? "Sending..." : "Send email"}
+              </Button>
+
+              {emailStatus && (
+                <div className="text-xs text-slate-300/80">{emailStatus}</div>
+              )}
             </div>
           )}
         </CardContent>
@@ -461,9 +374,27 @@ function UploadPage() {
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<UploadPage />} />
-      <Route path="/t/:transferId" element={<TransferPage />} />
       <Route path="/auth" element={<AuthPage />} />
+
+      <Route
+        path="/"
+        element={
+          <RequireAuth>
+            <UploadPage />
+          </RequireAuth>
+        }
+      />
+
+      <Route
+        path="/t/:transferId"
+        element={
+          <RequireAuth>
+            <TransferPage />
+          </RequireAuth>
+        }
+      />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
