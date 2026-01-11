@@ -1,12 +1,16 @@
 import { useState } from "react";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+} from "firebase/auth";
 import { auth } from "../lib/firebase";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useLocation, useNavigate } from "react-router-dom";
 
-
+// ✅ logo (same as Upload page)
+import logo from "../assets/logo.png";
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"login" | "signup">("login");
@@ -16,7 +20,6 @@ export default function AuthPage() {
   const navigate = useNavigate();
   const location = useLocation() as any;
   const from = location?.state?.from ?? "/";
-
 
   async function handleSubmit() {
     setStatus("");
@@ -43,7 +46,18 @@ export default function AuthPage() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
       <Card className="w-full max-w-md bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
         <CardContent className="p-7 space-y-4">
-          <div className="text-xl font-semibold">
+          {/* ✅ LOGO (same size as Upload page) */}
+          <div className="flex justify-center pb-1">
+            <img
+              src={logo}
+              alt="Swift Transfer"
+              className="h-28 sm:h-36 md:h-44 lg:h-52 w-auto opacity-95 select-none"
+              draggable={false}
+            />
+          </div>
+
+          {/* ✅ Title text forced to white */}
+          <div className="text-xl font-semibold text-white">
             {mode === "login" ? "Sign in" : "Create account"}
           </div>
 
@@ -76,7 +90,9 @@ export default function AuthPage() {
             onClick={() => setMode(mode === "login" ? "signup" : "login")}
             className="w-full"
           >
-            {mode === "login" ? "Need an account? Sign up" : "Have an account? Sign in"}
+            {mode === "login"
+              ? "Need an account? Sign up"
+              : "Have an account? Sign in"}
           </Button>
 
           {status && (
