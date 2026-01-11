@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
+import { getAuth } from "firebase/auth";
 
 type TransferFile = {
   name: string;
@@ -57,7 +58,9 @@ function StatusPill({ status }: { status?: string }) {
       : "bg-slate-500/15 text-slate-200 border-slate-500/30";
 
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs ${cls}`}>
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs ${cls}`}
+    >
       {status || "unknown"}
     </span>
   );
@@ -76,6 +79,17 @@ function fileIcon(name: string) {
   return "📄";
 }
 
+async function getIdTokenSafe(): Promise<string | null> {
+  const auth = getAuth();
+  const user = auth.currentUser;
+  if (!user) return null;
+  try {
+    return await user.getIdToken();
+  } catch {
+    return null;
+  }
+}
+
 export default function TransferPage() {
   const { transferId } = useParams();
   const [data, setData] = useState<TransferResponse | null>(null);
@@ -84,19 +98,6 @@ export default function TransferPage() {
 
   const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
-
-  function handleDownloadAllZip() {
-  if (!transferId) return;
-
-  setDownloadingAll(true);
-
-  // Deschide endpoint-ul care livrează zip (download)
-  const url = `${API_BASE}/api/transfers/${transferId}/download.zip`;
-  window.open(url, "_blank", "noopener,noreferrer");
-
-  // mic reset UI
-  setTimeout(() => setDownloadingAll(false), 800);
-}
 
   const totalSize = useMemo(() => {
     if (!data?.files?.length) return 0;
@@ -118,7 +119,12 @@ export default function TransferPage() {
 
         if (!transferId) throw new Error("Missing transferId in URL.");
 
-        const res = await fetch(`${API_BASE}/api/transfers/${transferId}`);
+        const token = await getIdTokenSafe();
+
+        const res = await fetch(`${API_BASE}/api/transfers/${transferId}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+
         if (!res.ok) {
           const text = await res.text();
           throw new Error(`Failed to load transfer (${res.status}): ${text}`);
@@ -128,7 +134,8 @@ export default function TransferPage() {
 
         if (!cancelled) setData(json);
       } catch (e: unknown) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Unknown error");
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : "Unknown error");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -147,7 +154,15 @@ export default function TransferPage() {
 
       setDownloadingIndex(idx);
 
-      const res = await fetch(`${API_BASE}/api/transfers/${transferId}/files/${idx}/download`);
+      const token = await getIdTokenSafe();
+
+      const res = await fetch(
+        `${API_BASE}/api/transfers/${transferId}/files/${idx}/download`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }
+      );
+
       if (!res.ok) {
         const text = await res.text();
         throw new Error(`Download link failed (${res.status}): ${text}`);
@@ -161,6 +176,46 @@ export default function TransferPage() {
       setError(e instanceof Error ? e.message : "Download failed");
     } finally {
       setDownloadingIndex(null);
+    }
+  }
+
+  // ✅ Download all as ZIP - uses fetch + blob so we can send Authorization header
+  async function handleDownloadAllZip() {
+    try {
+      setError("");
+      if (!transferId) return;
+
+      setDownloadingAll(true);
+
+      const token = await getIdTokenSafe();
+
+      const res = await fetch(
+        `${API_BASE}/api/transfers/${transferId}/download.zip`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }
+      );
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`ZIP download failed (${res.status}): ${text}`);
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `swift-transfer-${transferId}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "ZIP download failed");
+    } finally {
+      setTimeout(() => setDownloadingAll(false), 400);
     }
   }
 
@@ -221,13 +276,18 @@ export default function TransferPage() {
             <div className="rounded-xl border border-slate-800 bg-slate-950/20 p-4 space-y-2">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                 <div className="text-sm text-slate-200/85">
-                  Created: <span className="text-slate-100">{formatDate(data.createdAt)}</span>
+                  Created:{" "}
+                  <span className="text-slate-100">
+                    {formatDate(data.createdAt)}
+                  </span>
                 </div>
 
                 {data.expiresAt ? (
                   <div className="text-sm text-slate-200/85">
                     Expires:{" "}
-                    <span className={isExpired ? "text-red-200" : "text-slate-100"}>
+                    <span
+                      className={isExpired ? "text-red-200" : "text-slate-100"}
+                    >
                       {formatDate(data.expiresAt)}
                     </span>
                   </div>
@@ -240,18 +300,19 @@ export default function TransferPage() {
                 </div>
               )}
 
-              {/* Download all (ZIP) – next step */}
+              {/* Download all */}
               <div className="pt-3 border-t border-slate-800/70 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div className="text-sm text-slate-200/85">
-                  You can download files individually or all at once as a single .zip archive.
+                  You can download files individually or all at once as a single
+                  .zip archive.
                 </div>
 
                 <Button
-                 variant="secondary"
-                 onClick={handleDownloadAllZip}
-                 disabled={isExpired || !data?.files?.length || downloadingAll}
+                  variant="secondary"
+                  onClick={handleDownloadAllZip}
+                  disabled={isExpired || !data?.files?.length || downloadingAll}
                 >
-                 {downloadingAll ? "Preparing..." : "Download all (ZIP)"}
+                  {downloadingAll ? "Preparing..." : "Download all (ZIP)"}
                 </Button>
               </div>
             </div>
@@ -260,9 +321,7 @@ export default function TransferPage() {
           {/* Files list */}
           {!loading && !error && data && (
             <div className="space-y-2">
-              <div className="text-sm text-slate-200/90 font-medium">
-                Files
-              </div>
+              <div className="text-sm text-slate-200/90 font-medium">Files</div>
 
               {data.files?.length ? (
                 <div className="space-y-2">
