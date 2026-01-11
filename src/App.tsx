@@ -1,14 +1,14 @@
 import { useMemo, useState } from "react";
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { Button } from "./components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
+import { Card, CardContent } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 import TransferPage from "./pages/TransferPage";
-import AuthPage from "./pages/AuthPage";
-import { useAuth } from "./lib/auth";
-import { signOut } from "firebase/auth";
-import { auth } from "./lib/firebase";
-import type { ReactElement } from "react";
+import logo from "./assets/logo.png";
+
+
+// Firebase
+import { getAuth, signOut } from "firebase/auth";
 
 type SelectedFile = {
   file: File;
@@ -40,31 +40,9 @@ const API_BASE =
   (import.meta.env.VITE_API_URL as string | undefined) ??
   "https://api.swift-transfer.app";
 
-function RequireAuth({ children }: { children: ReactElement }) {
-  const { user, loading } = useAuth();
-  const location = useLocation();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-        <div className="rounded-md border border-slate-800 bg-slate-900/40 px-4 py-3 text-sm">
-          Checking session...
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Navigate to="/auth" replace state={{ from: location.pathname }} />;
-  }
-
-  return children;
-}
-
-
 function UploadPage() {
-  const { user, getIdToken } = useAuth();
-
+  const auth = getAuth();
+  const userEmail = auth.currentUser?.email ?? "";
 
   const [files, setFiles] = useState<SelectedFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -86,7 +64,9 @@ function UploadPage() {
 
   function addFiles(list: FileList | null) {
     if (!list) return;
+
     setShareUrl("");
+
     const incoming: SelectedFile[] = Array.from(list).map((file) => ({
       file,
       id: crypto.randomUUID(),
@@ -99,10 +79,19 @@ function UploadPage() {
     setFiles((prev) => prev.filter((f) => f.id !== id));
   }
 
+  function clearAll() {
+    setShareUrl("");
+    setFiles([]);
+    setStatus("");
+    setError("");
+    setEmailStatus("");
+  }
+
   async function handleUpload() {
     setError("");
     setStatus("");
     setShareUrl("");
+    setEmailStatus("");
 
     if (!files.length) {
       setError("Selectează cel puțin un fișier.");
@@ -112,6 +101,10 @@ function UploadPage() {
     setIsUploading(true);
 
     try {
+      // get firebase token (only if you're using auth-protected init/complete)
+      const token = await auth.currentUser?.getIdToken?.();
+
+      // 1) init transfer
       const initPayload = {
         files: files.map((f) => ({
           name: f.file.name,
@@ -120,15 +113,12 @@ function UploadPage() {
         })),
       };
 
-      const token = await getIdToken();
-      if (!token) throw new Error("Not authenticated.");
       const initRes = await fetch(`${API_BASE}/api/transfers/init`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-
         body: JSON.stringify(initPayload),
       });
 
@@ -145,6 +135,7 @@ function UploadPage() {
 
       setStatus(`Init OK. Uploading ${initJson.uploads.length} file(s)...`);
 
+      // 2) upload each file to GCS signed URL
       for (let i = 0; i < initJson.uploads.length; i++) {
         const upload = initJson.uploads[i];
         const file = files[i]?.file;
@@ -168,6 +159,7 @@ function UploadPage() {
         setStatus(`Uploaded ${i + 1}/${initJson.uploads.length}: ${file.name}`);
       }
 
+      // 3) complete
       setIsFinalizing(true);
       setStatus("Finalizing transfer (generating share link)...");
 
@@ -175,7 +167,7 @@ function UploadPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           transferId: initJson.transferId,
@@ -229,16 +221,15 @@ function UploadPage() {
         return;
       }
 
-      setIsSendingEmail(true);
+      const token = await auth.currentUser?.getIdToken?.();
 
-      const token = await getIdToken();
-      if (!token) throw new Error("Not authenticated.");
+      setIsSendingEmail(true);
 
       const res = await fetch(`${API_BASE}/api/transfers/${transferId}/email`, {
         method: "POST",
         headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           to: emailTo.trim(),
@@ -259,38 +250,84 @@ function UploadPage() {
     }
   }
 
+  async function handleSignOut() {
+    await signOut(auth);
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-      <Card className="w-full max-w-2xl bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
-        <CardHeader className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <CardTitle className="text-2xl">Swift Transfer</CardTitle>
+      {/* subtle background glow */}
+      <div className="pointer-events-none fixed inset-0 opacity-40">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(99,102,241,0.22),transparent_55%),radial-gradient(circle_at_85%_30%,rgba(56,189,248,0.14),transparent_60%),radial-gradient(circle_at_50%_85%,rgba(168,85,247,0.10),transparent_60%)]" />
+      </div>
 
-            <div className="flex items-center gap-2">
-              <div className="text-xs text-slate-300/80 hidden sm:block">
-                {user?.email}
-              </div>
-              <Button
-                variant="secondary"
-                onClick={() => signOut(auth)}
-                className="h-9"
-              >
-                Sign out
-              </Button>
+      {/* TOP BAR: email + sign out (TOP-RIGHT like in red area) */}
+      <div className="fixed top-6 right-6 z-50 flex items-center gap-3">
+        <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/35 backdrop-blur-xl px-4 py-2 shadow-2xl">
+          {userEmail ? (
+            <div className="text-sm text-slate-200/90 truncate max-w-[240px]">
+              {userEmail}
             </div>
+          ) : (
+            <div className="text-sm text-slate-200/60">Not signed in</div>
+          )}
+
+          <Button variant="secondary" onClick={handleSignOut}>
+            Sign out
+          </Button>
+        </div>
+      </div>
+
+      <Card className="relative w-full max-w-3xl bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
+        <CardContent className="p-8 space-y-6">
+          {/* LOGO (10x bigger) */}
+          <div className="flex justify-center pt-2">
+          <img
+          src={logo}
+  alt="Swift Transfer"
+  className="h-28 sm:h-36 md:h-44 lg:h-52 w-auto opacity-95 select-none"
+  draggable={false}
+        
+            />
           </div>
 
-          <p className="text-sm text-slate-200/80">
+          <div className="text-center text-sm md:text-base text-slate-200/90">
             Încarcă fișiere și generăm share link + email.
-          </p>
-        </CardHeader>
+          </div>
 
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Input type="file" multiple onChange={(e) => addFiles(e.target.files)} />
-            <Button onClick={handleUpload} disabled={isUploading || isFinalizing}>
-              {isUploading ? "Uploading..." : isFinalizing ? "Finalizing..." : "Upload"}
-            </Button>
+          {/* Upload row */}
+          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+            <div className="flex-1">
+              <Input
+                type="file"
+                multiple
+                onChange={(e) => addFiles(e.target.files)}
+                className="text-slate-100"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={handleUpload}
+                disabled={isUploading || isFinalizing}
+              >
+                {isUploading
+                  ? "Uploading..."
+                  : isFinalizing
+                  ? "Finalizing..."
+                  : "Upload"}
+              </Button>
+
+              <Button
+                variant="secondary"
+                onClick={clearAll}
+                disabled={
+                  isUploading || isFinalizing || (!files.length && !shareUrl)
+                }
+              >
+                Clear all
+              </Button>
+            </div>
           </div>
 
           <div className="text-sm text-slate-200/80">
@@ -302,14 +339,15 @@ function UploadPage() {
               {files.map((f) => (
                 <div
                   key={f.id}
-                  className="flex items-center justify-between rounded-md border border-slate-800 bg-slate-950/30 px-3 py-2"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/20 px-4 py-3"
                 >
                   <div className="min-w-0">
                     <div className="truncate text-slate-100">{f.file.name}</div>
-                    <div className="text-xs text-slate-300/70">
+                    <div className="text-xs text-slate-300/80">
                       {formatBytes(f.file.size)}
                     </div>
                   </div>
+
                   <Button
                     variant="secondary"
                     onClick={() => removeFile(f.id)}
@@ -323,62 +361,77 @@ function UploadPage() {
           )}
 
           {status && (
-            <div className="rounded-md border border-slate-800 bg-slate-950/30 p-3 text-sm text-slate-100">
+            <div className="rounded-lg border border-slate-800 bg-slate-950/25 p-4 text-sm text-slate-100">
               {status}
             </div>
           )}
 
           {error && (
-            <div className="rounded-md border border-red-900 bg-red-950/40 p-3 text-sm text-red-200">
+            <div className="rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-100">
               {error}
             </div>
           )}
 
-          {/* Share link + Email UI */}
           {shareUrl && (
-            <div className="rounded-md border border-slate-800 bg-slate-950/30 p-4 text-sm space-y-3">
-              <div className="font-medium text-green-400">✅ Share link</div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/20 p-4 space-y-3">
+              <div className="font-medium text-emerald-300">✅ Share link</div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2">
                 <input
                   value={shareUrl}
                   readOnly
                   className="flex-1 rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100"
                 />
-                <Button onClick={() => navigator.clipboard.writeText(shareUrl)}>
-                  Copy
-                </Button>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() =>
+                      window.open(shareUrl, "_blank", "noopener,noreferrer")
+                    }
+                  >
+                    Open
+                  </Button>
+                  <Button onClick={() => navigator.clipboard.writeText(shareUrl)}>
+                    Copy
+                  </Button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-                <div className="space-y-1">
-                  <div className="text-xs text-slate-300/80">Send to email</div>
+              {/* Email */}
+              <div className="pt-3 border-t border-slate-800/70 space-y-2">
+                <div className="text-sm text-slate-200/90 font-medium">
+                  Send share link by email
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   <Input
                     value={emailTo}
                     onChange={(e) => setEmailTo(e.target.value)}
-                    placeholder="name@example.com"
-                    className="text-slate-100 placeholder:text-slate-500"
+                    placeholder="recipient@email.com"
+                    className="md:col-span-1 text-slate-100 placeholder:text-slate-400"
                   />
-                </div>
-
-                <div className="space-y-1">
-                  <div className="text-xs text-slate-300/80">Optional message</div>
                   <Input
                     value={emailMsg}
                     onChange={(e) => setEmailMsg(e.target.value)}
-                    placeholder="Short message..."
-                    className="text-slate-100 placeholder:text-slate-500"
+                    placeholder="Optional message..."
+                    className="md:col-span-2 text-slate-100 placeholder:text-slate-400"
                   />
                 </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={handleSendEmail}
+                    disabled={isSendingEmail || !emailTo.trim()}
+                  >
+                    {isSendingEmail ? "Sending..." : "Send"}
+                  </Button>
+
+                  {emailStatus && (
+                    <div className="text-sm text-slate-200/80">{emailStatus}</div>
+                  )}
+                </div>
               </div>
-
-              <Button onClick={handleSendEmail} disabled={isSendingEmail}>
-                {isSendingEmail ? "Sending..." : "Send email"}
-              </Button>
-
-              {emailStatus && (
-                <div className="text-xs text-slate-300/80">{emailStatus}</div>
-              )}
             </div>
           )}
         </CardContent>
@@ -390,27 +443,8 @@ function UploadPage() {
 export default function App() {
   return (
     <Routes>
-      <Route path="/auth" element={<AuthPage />} />
-
-      <Route
-        path="/"
-        element={
-          <RequireAuth>
-            <UploadPage />
-          </RequireAuth>
-        }
-      />
-
-      <Route
-        path="/t/:transferId"
-        element={
-          <RequireAuth>
-            <TransferPage />
-          </RequireAuth>
-        }
-      />
-
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="/" element={<UploadPage />} />
+      <Route path="/t/:transferId" element={<TransferPage />} />
     </Routes>
   );
 }
