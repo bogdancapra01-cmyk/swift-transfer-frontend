@@ -83,12 +83,15 @@ async function getIdTokenSafe(): Promise<string | null> {
   const auth = getAuth();
   const user = auth.currentUser;
   if (!user) return null;
+
   try {
-    return await user.getIdToken();
+    // true = force refresh (evită token expirat)
+    return await user.getIdToken(true);
   } catch {
     return null;
   }
 }
+
 
 export default function TransferPage() {
   const { transferId } = useParams();
