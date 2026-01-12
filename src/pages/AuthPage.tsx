@@ -8,6 +8,7 @@ import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useLocation, useNavigate } from "react-router-dom";
+import { GlowBackground } from "@/components/ui/GlowBackground";
 
 // ✅ logo (same as Upload page)
 import logo from "../assets/logo.png";
@@ -43,7 +44,8 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+  <GlowBackground>
+    <div className="flex items-center justify-center p-6">
       <Card className="w-full max-w-md bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
         <CardContent className="p-7 space-y-4">
           {/* ✅ LOGO (same size as Upload page) */}
@@ -56,8 +58,8 @@ export default function AuthPage() {
             />
           </div>
 
-          {/* ✅ Title text forced to white */}
-          <div className="text-xl font-semibold text-white">
+          {/* ✅ Title */}
+          <div className="text-xl font-semibold text-white text-center">
             {mode === "login" ? "Sign in" : "Create account"}
           </div>
 
@@ -103,5 +105,7 @@ export default function AuthPage() {
         </CardContent>
       </Card>
     </div>
-  );
+  </GlowBackground>
+);
+
 }

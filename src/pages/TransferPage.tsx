@@ -3,6 +3,9 @@ import { useParams, Link } from "react-router-dom";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { getAuth } from "firebase/auth";
+import { GlowBackground } from "@/components/ui/GlowBackground";
+import logo from "@/assets/logo.png";
+
 
 type TransferFile = {
   name: string;
@@ -262,14 +265,18 @@ export default function TransferPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-      {/* subtle background glow */}
-      <div className="pointer-events-none fixed inset-0 opacity-40">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(99,102,241,0.22),transparent_55%),radial-gradient(circle_at_85%_30%,rgba(56,189,248,0.14),transparent_60%),radial-gradient(circle_at_50%_85%,rgba(168,85,247,0.10),transparent_60%)]" />
-      </div>
-
+  <GlowBackground>
+    <div className="flex items-center justify-center p-6">
       <Card className="relative w-full max-w-3xl bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
         <CardContent className="p-8 space-y-6">
+          {/* Logo */}
+        <div className="flex justify-center mb-6">
+        <img
+        src={logo}
+        alt="Swift Transfer"
+        className="h-36 sm:h-44 md:h-52 lg:h-60 w-auto opacity-95 select-none"
+        />
+    </div>
           {/* Header */}
           <div className="flex flex-col gap-3">
             <div className="flex items-start justify-between gap-3">
@@ -402,5 +409,7 @@ export default function TransferPage() {
         </CardContent>
       </Card>
     </div>
-  );
+  </GlowBackground>
+);
+
 }

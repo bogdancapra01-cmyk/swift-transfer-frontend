@@ -6,6 +6,10 @@ import { Input } from "./components/ui/input";
 import TransferPage from "./pages/TransferPage";
 import AuthPage from "./pages/AuthPage";
 import MyUploadsPage from "./pages/MyUploadsPage";
+import { GlowBackground } from "@/components/ui/GlowBackground";
+
+
+
 
 
 // Firebase
@@ -277,11 +281,8 @@ function UploadPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-      <div className="pointer-events-none fixed inset-0 opacity-40">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(99,102,241,0.22),transparent_55%),radial-gradient(circle_at_85%_30%,rgba(56,189,248,0.14),transparent_60%),radial-gradient(circle_at_50%_85%,rgba(168,85,247,0.10),transparent_60%)]" />
-      </div>
-
+  <GlowBackground>
+    <div className="flex items-center justify-center p-6">
       {/* TOP RIGHT: email + sign out */}
       <div className="fixed top-6 right-6 z-50 flex items-center gap-3">
         <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/35 backdrop-blur-xl px-4 py-2 shadow-2xl">
@@ -317,19 +318,33 @@ function UploadPage() {
 
           <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
             <div className="flex-1">
-              <Input
-                type="file"
-                multiple
-                onChange={(e) => addFiles(e.target.files)}
-                className="text-slate-100"
-              />
+              {/* Choose files */}
+        <div className="flex-1">
+        <label
+        htmlFor="file-upload"
+        className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/30 px-6 py-6 text-center transition hover:border-indigo-400 hover:bg-slate-900/40"
+      >
+        <div className="text-lg font-medium text-slate-100">
+          Choose files
+        </div>
+        <div className="mt-1 text-sm text-slate-300/80">
+          Click to select files or drag & drop
+        </div>
+      </label>
+
+      <input
+        id="file-upload"
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => addFiles(e.target.files)}
+  />
+</div>
+
             </div>
 
             <div className="flex gap-2">
-              <Button
-                onClick={handleUpload}
-                disabled={isUploading || isFinalizing}
-              >
+              <Button onClick={handleUpload} disabled={isUploading || isFinalizing}>
                 {isUploading
                   ? "Uploading..."
                   : isFinalizing
@@ -340,9 +355,7 @@ function UploadPage() {
               <Button
                 variant="secondary"
                 onClick={clearAll}
-                disabled={
-                  isUploading || isFinalizing || (!files.length && !shareUrl)
-                }
+                disabled={isUploading || isFinalizing || (!files.length && !shareUrl)}
               >
                 Clear all
               </Button>
@@ -455,7 +468,8 @@ function UploadPage() {
         </CardContent>
       </Card>
     </div>
-  );
+  </GlowBackground>
+);
 }
 
 export default function App() {
