@@ -6,10 +6,8 @@ import { Input } from "./components/ui/input";
 import TransferPage from "./pages/TransferPage";
 import AuthPage from "./pages/AuthPage";
 import MyUploadsPage from "./pages/MyUploadsPage";
-import { GlowBackground } from "@/components/ui/GlowBackground";
 import { TopRightBar } from "@/components/ui/TopRightBar";
 import { PageShell } from "@/components/ui/PageShell";
-
 
 
 
