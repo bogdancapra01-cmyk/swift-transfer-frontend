@@ -8,7 +8,8 @@ import AuthPage from "./pages/AuthPage";
 import MyUploadsPage from "./pages/MyUploadsPage";
 import { TopRightBar } from "@/components/ui/TopRightBar";
 import { PageShell } from "@/components/ui/PageShell";
-
+import { logEvent } from "firebase/analytics";
+import { analytics } from "./lib/firebase";
 
 
 
@@ -68,6 +69,19 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   if (!user) return <Navigate to="/auth" replace state={{ from: location.pathname }} />;
 
   return <>{children}</>;
+}
+function AnalyticsPageViews() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!analytics) return;
+
+    logEvent(analytics, "page_view", {
+      page_path: location.pathname + location.search,
+    });
+  }, [location]);
+
+  return null;
 }
 
 function UploadPage() {
@@ -482,37 +496,42 @@ function UploadPage() {
 
 export default function App() {
   return (
-    <Routes>
-      {/* Default: requires auth; otherwise redirect to /auth */}
-      <Route
-        path="/"
-        element={
-          <RequireAuth>
-            <UploadPage />
-          </RequireAuth>
-        }
-      />
+    <>
+      {/* 🔴 ANALYTICS – trebuie să fie randat o singură dată */}
+      <AnalyticsPageViews />
 
-      {/* Auth page */}
-      <Route path="/auth" element={<AuthPage />} />
+      <Routes>
+        {/* Default: requires auth; otherwise redirect to /auth */}
+        <Route
+          path="/"
+          element={
+            <RequireAuth>
+              <UploadPage />
+            </RequireAuth>
+          }
+        />
 
-      {/* Transfer page (public) */}
-      <Route path="/t/:transferId" element={<TransferPage />} />
+        {/* Auth page */}
+        <Route path="/auth" element={<AuthPage />} />
 
+        {/* Transfer page (public) */}
+        <Route path="/t/:transferId" element={<TransferPage />} />
 
-      {/* My uploads (protected) */}
-      <Route
-        path="/my-uploads"
-        element={
-          <RequireAuth>
-            <MyUploadsPage />
-          </RequireAuth>
-        }
-      />
+        {/* My uploads (protected) */}
+        <Route
+          path="/my-uploads"
+          element={
+            <RequireAuth>
+              <MyUploadsPage />
+            </RequireAuth>
+          }
+        />
 
-      {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }
+
 
