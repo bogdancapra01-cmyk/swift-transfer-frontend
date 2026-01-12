@@ -53,7 +53,7 @@ export default function AuthPage() {
             <img
               src={logo}
               alt="Swift Transfer"
-              className="h-28 sm:h-36 md:h-44 lg:h-52 w-auto opacity-95 select-none"
+              className="h-36 sm:h-44 md:h-52 lg:h-60 w-auto opacity-95 select-none"
               draggable={false}
             />
           </div>

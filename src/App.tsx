@@ -7,7 +7,7 @@ import TransferPage from "./pages/TransferPage";
 import AuthPage from "./pages/AuthPage";
 import MyUploadsPage from "./pages/MyUploadsPage";
 import { GlowBackground } from "@/components/ui/GlowBackground";
-
+import { TopRightBar } from "@/components/ui/TopRightBar";
 
 
 
@@ -86,6 +86,7 @@ function UploadPage() {
   const [emailStatus, setEmailStatus] = useState<string>("");
 
   const [isFinalizing, setIsFinalizing] = useState(false);
+  
 
   const totalSize = useMemo(
     () => files.reduce((sum, f) => sum + f.file.size, 0),
@@ -284,21 +285,7 @@ function UploadPage() {
   <GlowBackground>
     <div className="flex items-center justify-center p-6">
       {/* TOP RIGHT: email + sign out */}
-      <div className="fixed top-6 right-6 z-50 flex items-center gap-3">
-        <div className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/35 backdrop-blur-xl px-4 py-2 shadow-2xl">
-          {userEmail ? (
-            <div className="text-sm text-slate-200/90 truncate max-w-[240px]">
-              {userEmail}
-            </div>
-          ) : (
-            <div className="text-sm text-slate-200/60">Not signed in</div>
-          )}
-
-          <Button variant="secondary" onClick={handleSignOut}>
-            Sign out
-          </Button>
-        </div>
-      </div>
+     <TopRightBar userEmail={userEmail} onSignOut={handleSignOut} />
 
       <Card className="relative w-full max-w-3xl bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
         <CardContent className="p-8 space-y-6">
@@ -307,7 +294,7 @@ function UploadPage() {
             <img
               src={logo}
               alt="Swift Transfer"
-              className="h-28 sm:h-36 md:h-44 lg:h-52 w-auto opacity-95 select-none"
+              className="h-36 sm:h-44 md:h-52 lg:h-60 w-auto opacity-95 select-none"
               draggable={false}
             />
           </div>

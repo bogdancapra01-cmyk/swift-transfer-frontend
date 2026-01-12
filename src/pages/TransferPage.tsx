@@ -5,6 +5,10 @@ import { Button } from "../components/ui/button";
 import { getAuth } from "firebase/auth";
 import { GlowBackground } from "@/components/ui/GlowBackground";
 import logo from "@/assets/logo.png";
+import { TopRightBar } from "@/components/ui/TopRightBar";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useAuth } from "@/lib/auth";
 
 
 type TransferFile = {
@@ -140,6 +144,12 @@ export default function TransferPage() {
 
   const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
+  const { user } = useAuth();
+  const userEmail = user?.email ?? null;
+
+  async function handleSignOut() {
+    await signOut(auth);
+  }
 
   const totalSize = useMemo(() => {
     if (!data?.files?.length) return 0;
@@ -266,6 +276,7 @@ export default function TransferPage() {
 
   return (
   <GlowBackground>
+    <TopRightBar userEmail={userEmail} onSignOut={handleSignOut} />
     <div className="flex items-center justify-center p-6">
       <Card className="relative w-full max-w-3xl bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
         <CardContent className="p-8 space-y-6">
