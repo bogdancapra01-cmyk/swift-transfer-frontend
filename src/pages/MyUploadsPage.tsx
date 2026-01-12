@@ -152,7 +152,7 @@ export default function MyUploadsPage() {
 
             {!loading && !error && normalized.length === 0 && (
               <p className="text-sm text-white/60">
-                No uploads yet. Go to Upload and create your first transfer.
+                No uploads yet. Go to Home/Upload and create your first transfer link.
               </p>
             )}
 
