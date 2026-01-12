@@ -8,6 +8,7 @@ import AuthPage from "./pages/AuthPage";
 import MyUploadsPage from "./pages/MyUploadsPage";
 import { GlowBackground } from "@/components/ui/GlowBackground";
 import { TopRightBar } from "@/components/ui/TopRightBar";
+import { PageShell } from "@/components/ui/PageShell";
 
 
 
@@ -282,11 +283,12 @@ function UploadPage() {
   }
 
   return (
-  <GlowBackground>
-    <div className="flex items-center justify-center p-6">
-      {/* TOP RIGHT: email + sign out */}
-     <TopRightBar userEmail={userEmail} onSignOut={handleSignOut} />
+  <>
+    {/* TOP RIGHT: email + sign out */}
+    <TopRightBar userEmail={userEmail} onSignOut={handleSignOut} />
 
+    <PageShell maxWidth="max-w-4xl">
+      {/* păstrăm exact ce aveai deja, doar schimbăm wrapper-ul exterior */}
       <Card className="relative w-full max-w-3xl bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
         <CardContent className="p-8 space-y-6">
           {/* LOGO */}
@@ -306,28 +308,27 @@ function UploadPage() {
           <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
             <div className="flex-1">
               {/* Choose files */}
-        <div className="flex-1">
-        <label
-        htmlFor="file-upload"
-        className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/30 px-6 py-6 text-center transition hover:border-indigo-400 hover:bg-slate-900/40"
-      >
-        <div className="text-lg font-medium text-slate-100">
-          Choose files
-        </div>
-        <div className="mt-1 text-sm text-slate-300/80">
-          Click to select files or drag & drop
-        </div>
-      </label>
+              <div className="flex-1">
+                <label
+                  htmlFor="file-upload"
+                  className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/30 px-6 py-6 text-center transition hover:border-indigo-400 hover:bg-slate-900/40"
+                >
+                  <div className="text-lg font-medium text-slate-100">
+                    Choose files
+                  </div>
+                  <div className="mt-1 text-sm text-slate-300/80">
+                    Click to select files or drag & drop
+                  </div>
+                </label>
 
-      <input
-        id="file-upload"
-        type="file"
-        multiple
-        className="hidden"
-        onChange={(e) => addFiles(e.target.files)}
-  />
-</div>
-
+                <input
+                  id="file-upload"
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => addFiles(e.target.files)}
+                />
+              </div>
             </div>
 
             <div className="flex gap-2">
@@ -454,9 +455,10 @@ function UploadPage() {
           )}
         </CardContent>
       </Card>
-    </div>
-  </GlowBackground>
+    </PageShell>
+  </>
 );
+
 }
 
 export default function App() {

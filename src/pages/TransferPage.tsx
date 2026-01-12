@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { getAuth } from "firebase/auth";
-import { GlowBackground } from "@/components/ui/GlowBackground";
 import logo from "@/assets/logo.png";
 import { TopRightBar } from "@/components/ui/TopRightBar";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth";
-
+import { PageShell } from "@/components/ui/PageShell";
 
 type TransferFile = {
   name: string;
@@ -92,7 +90,6 @@ async function getIdTokenSafe(): Promise<string | null> {
   if (!user) return null;
 
   try {
-    // true = force refresh (evită token expirat)
     return await user.getIdToken(true);
   } catch {
     return null;
@@ -144,6 +141,7 @@ export default function TransferPage() {
 
   const [downloadingIndex, setDownloadingIndex] = useState<number | null>(null);
   const [downloadingAll, setDownloadingAll] = useState(false);
+
   const { user } = useAuth();
   const userEmail = user?.email ?? null;
 
@@ -223,8 +221,6 @@ export default function TransferPage() {
       const json = (await res.json()) as DownloadUrlResponse;
       if (!json.url) throw new Error(json.error || "Missing download url.");
 
-      // ✅ Previously: window.open(json.url...) (couldn't send auth headers)
-      // ✅ Now: fetch the file with Authorization and trigger a real download
       const filename = data?.files?.[idx]?.name || `file-${idx + 1}`;
       await downloadBlobSmart(json.url, filename);
     } catch (e: unknown) {
@@ -275,66 +271,61 @@ export default function TransferPage() {
   }
 
   return (
-  <GlowBackground>
-    <TopRightBar userEmail={userEmail} onSignOut={handleSignOut} />
-    <div className="flex items-center justify-center p-6">
-      <Card className="relative w-full max-w-3xl bg-slate-900/35 border-slate-800 backdrop-blur-xl shadow-2xl">
-        <CardContent className="p-8 space-y-6">
-          {/* Logo */}
-        <div className="flex justify-center mb-6">
-        <img
-        src={logo}
-        alt="Swift Transfer"
-        className="h-36 sm:h-44 md:h-52 lg:h-60 w-auto opacity-95 select-none"
-        />
-    </div>
-          {/* Header */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-2xl font-semibold text-slate-100">
-                  Transfer
-                </div>
-                <div className="text-xs text-slate-300/80 break-all">
-                  {transferId}
-                </div>
-              </div>
+    <>
+      <TopRightBar userEmail={userEmail} onSignOut={handleSignOut} />
 
-              <div className="flex items-center gap-2">
-                <StatusPill status={data?.status} />
-              </div>
-            </div>
-
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-              <Link to="/">
-                <Button variant="secondary">← Back</Button>
-              </Link>
-
-              {data?.files?.length ? (
-                <div className="text-sm text-slate-200/80">
-                  {data.files.length} file(s) • {formatBytes(totalSize)}
-                </div>
-              ) : null}
-            </div>
+      <PageShell maxWidth="max-w-5xl">
+        {/* Header */}
+        <div className="flex flex-col items-center gap-3 pb-6">
+          <div className="opacity-95 select-none">
+            <img
+              src={logo}
+              alt="Swift Transfer"
+              className="h-36 sm:h-44 md:h-52 lg:h-60 w-auto opacity-95 select-none"
+              draggable={false}
+            />
           </div>
 
-          {/* Loading / error */}
-          {loading && (
-            <div className="rounded-lg border border-slate-800 bg-slate-950/25 p-4 text-sm text-slate-100">
-              Loading transfer...
-            </div>
-          )}
+          <div className="text-3xl font-semibold text-slate-100">Transfer</div>
+          <div className="text-xs text-slate-300/80 break-all">{transferId}</div>
+        </div>
 
-          {error && (
-            <div className="rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-100">
-              {error}
-            </div>
-          )}
+        {/* Loading / error */}
+        {loading && (
+          <div className="rounded-xl border border-slate-800 bg-slate-950/20 p-4 text-sm text-slate-100">
+            Loading transfer...
+          </div>
+        )}
 
-          {/* Meta */}
-          {!loading && !error && data && (
-            <div className="rounded-xl border border-slate-800 bg-slate-950/20 p-4 space-y-2">
+        {error && (
+          <div className="rounded-xl border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-100">
+            {error}
+          </div>
+        )}
+
+        {/* Content */}
+        {!loading && !error && data && (
+          <div className="space-y-4">
+            {/* Meta card */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/35 backdrop-blur-xl shadow-2xl p-5 space-y-3">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <StatusPill status={data?.status} />
+                  {data?.files?.length ? (
+                    <div className="text-sm text-slate-200/80">
+                      {data.files.length} file(s) • {formatBytes(totalSize)}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Link to="/">
+                    <Button variant="secondary">← Back</Button>
+                  </Link>
+                </div>
+              </div>
+
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 pt-2 border-t border-slate-800/70">
                 <div className="text-sm text-slate-200/85">
                   Created:{" "}
                   <span className="text-slate-100">
@@ -360,7 +351,6 @@ export default function TransferPage() {
                 </div>
               )}
 
-              {/* Download all */}
               <div className="pt-3 border-t border-slate-800/70 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div className="text-sm text-slate-200/85">
                   You can download files individually or all at once as a single
@@ -376,11 +366,9 @@ export default function TransferPage() {
                 </Button>
               </div>
             </div>
-          )}
 
-          {/* Files list */}
-          {!loading && !error && data && (
-            <div className="space-y-2">
+            {/* Files card */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/35 backdrop-blur-xl shadow-2xl p-5 space-y-3">
               <div className="text-sm text-slate-200/90 font-medium">Files</div>
 
               {data.files?.length ? (
@@ -416,11 +404,9 @@ export default function TransferPage() {
                 </div>
               )}
             </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  </GlowBackground>
-);
-
+          </div>
+        )}
+      </PageShell>
+    </>
+  );
 }

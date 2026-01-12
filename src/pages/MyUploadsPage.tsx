@@ -188,7 +188,9 @@ export default function MyUploadsPage() {
                       className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="relative mx-auto w-full max-w-4xl">
+
+
                           <span className="text-base font-medium text-white/90">
                             {filesCount} file{filesCount === 1 ? "" : "s"}
                           </span>
