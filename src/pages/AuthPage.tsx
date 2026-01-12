@@ -11,6 +11,8 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useLocation, useNavigate } from "react-router-dom";
 import { GlowBackground } from "@/components/ui/GlowBackground";
+import { sendPasswordResetEmail } from "firebase/auth";
+
 
 // ✅ logo (same as Upload page)
 import logo from "../assets/logo.png";
@@ -56,6 +58,21 @@ export default function AuthPage() {
       setStatus(e?.message ?? "Google sign-in failed");
     }
   }
+
+  async function handleResetPassword() {
+  setStatus("");
+  try {
+    if (!email.trim()) {
+      setStatus("Enter your email first.");
+      return;
+    }
+    await sendPasswordResetEmail(auth, email.trim());
+    setStatus("✅ Password reset email sent. Check your inbox.");
+  } catch (e: any) {
+    setStatus(e?.message ?? "Could not send reset email.");
+  }
+}
+
 
   return (
     <GlowBackground>
@@ -108,6 +125,17 @@ export default function AuthPage() {
 
             <span>Continue with Google</span>
               </Button>
+
+              {mode === "login" && (
+              <button
+                type="button"
+                onClick={handleResetPassword}
+                className="text-sm text-slate-200/80 hover:text-slate-100 underline underline-offset-4 text-center w-full"
+              >
+                Forgot password?
+              </button>
+)}
+
 
 
             {/* separator */}
