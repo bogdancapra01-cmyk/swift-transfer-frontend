@@ -5,6 +5,8 @@ import { Card, CardContent } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 import TransferPage from "./pages/TransferPage";
 import AuthPage from "./pages/AuthPage";
+import MyUploadsPage from "./pages/MyUploadsPage";
+
 
 // Firebase
 import { getAuth, signOut, onAuthStateChanged } from "firebase/auth";
@@ -474,17 +476,27 @@ export default function App() {
 
       {/* Transfer page (public) */}
       <Route
-  path="/t/:transferId"
-  element={
-    <RequireAuth>
-      <TransferPage />
-    </RequireAuth>
-  }
-/>
+        path="/t/:transferId"
+        element={
+          <RequireAuth>
+            <TransferPage />
+          </RequireAuth>
+        }
+      />
 
+      {/* My uploads (protected) */}
+      <Route
+        path="/my-uploads"
+        element={
+          <RequireAuth>
+            <MyUploadsPage />
+          </RequireAuth>
+        }
+      />
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
+
