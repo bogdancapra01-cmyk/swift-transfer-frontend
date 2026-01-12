@@ -9,6 +9,7 @@ import { auth } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth";
 import { PageShell } from "@/components/ui/PageShell";
 
+
 type TransferFile = {
   name: string;
   type: string;
@@ -272,6 +273,23 @@ export default function TransferPage() {
   return (
     <>
       <TopRightBar userEmail={userEmail} onSignOut={handleSignOut} />
+
+      <a
+  href="https://docs.google.com/forms/d/e/1FAIpQLSfz4oGM7ITJfXZjBal4vyBHaTbASKg2ZLW6BmPRhXysZ30Umg/viewform?usp=dialog"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="
+    fixed bottom-4
+    right-4 sm:right-6
+    z-40
+    text-xs text-slate-300/60
+    hover:text-slate-100
+    underline underline-offset-4
+    transition-colors
+  "
+>
+  Share feedback
+</a>
 
       <PageShell maxWidth="max-w-5xl">
         {/* Header */}

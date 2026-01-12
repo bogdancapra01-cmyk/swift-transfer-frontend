@@ -11,6 +11,7 @@ import { PageShell } from "@/components/ui/PageShell";
 
 
 
+
 // Firebase
 import { getAuth, signOut, onAuthStateChanged } from "firebase/auth";
 import type { User } from "firebase/auth";
@@ -284,6 +285,26 @@ function UploadPage() {
   <>
     {/* TOP RIGHT: email + sign out */}
     <TopRightBar userEmail={userEmail} onSignOut={handleSignOut} />
+
+   <a
+  href="https://docs.google.com/forms/d/e/1FAIpQLSfz4oGM7ITJfXZjBal4vyBHaTbASKg2ZLW6BmPRhXysZ30Umg/viewform?usp=dialog"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="
+    fixed bottom-4
+    right-4 sm:right-6
+    z-40
+    text-xs text-slate-300/60
+    hover:text-slate-100
+    underline underline-offset-4
+    transition-colors
+  "
+>
+  Share feedback
+</a>
+
+
+
 
     <PageShell maxWidth="max-w-4xl">
       {/* păstrăm exact ce aveai deja, doar schimbăm wrapper-ul exterior */}

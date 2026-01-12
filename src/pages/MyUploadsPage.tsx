@@ -11,6 +11,7 @@ import { auth } from "@/lib/firebase";
 
 
 
+
 type Transfer = any;
 
 export default function MyUploadsPage() {
@@ -123,6 +124,22 @@ export default function MyUploadsPage() {
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(99,102,241,0.22),transparent_40%),radial-gradient(circle_at_70%_10%,rgba(56,189,248,0.16),transparent_35%),radial-gradient(circle_at_50%_90%,rgba(168,85,247,0.16),transparent_40%)]" />
 
       <div className="relative mx-auto max-w-4xl px-4 py-10">
+
+        <a
+    href="https://docs.google.com/forms/d/e/1FAIpQLSfz4oGM7ITJfXZjBal4vyBHaTbASKg2ZLW6BmPRhXysZ30Umg/viewform?usp=dialog"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="
+        fixed bottom-4 right-4 z-40
+        text-xs text-slate-300/60
+        hover:text-slate-100
+        underline underline-offset-4
+        transition-colors
+    "
+    >
+    Share feedback
+    </a>
+
         {/* header */}
         <div className="mb-6 flex flex-col items-center gap-3">
          <img
