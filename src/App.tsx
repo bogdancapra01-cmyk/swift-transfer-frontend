@@ -476,14 +476,8 @@ export default function App() {
       <Route path="/auth" element={<AuthPage />} />
 
       {/* Transfer page (public) */}
-      <Route
-        path="/t/:transferId"
-        element={
-          <RequireAuth>
-            <TransferPage />
-          </RequireAuth>
-        }
-      />
+      <Route path="/t/:transferId" element={<TransferPage />} />
+
 
       {/* My uploads (protected) */}
       <Route

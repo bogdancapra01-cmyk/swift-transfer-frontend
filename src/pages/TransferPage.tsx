@@ -169,11 +169,10 @@ export default function TransferPage() {
 
         if (!transferId) throw new Error("Missing transferId in URL.");
 
-        const token = await getIdTokenSafe();
+        
 
-        const res = await fetch(`${API_BASE}/api/transfers/${transferId}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
+        const res = await fetch(`${API_BASE}/api/transfers/${transferId}`);
+
 
         if (!res.ok) {
           const text = await res.text();
